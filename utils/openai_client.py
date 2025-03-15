@@ -127,27 +127,43 @@ class OpenAIClient:
         Returns:
             str: 生成的文本
         """
-        # 设置自定义的API基础URL（如果有）
+        # 设置自定义的API基础URL和API密钥
         base_url = model_config.get("base_url")
-        if base_url and base_url != "https://api.openai.com/v1":
+        api_key = os.environ.get(model_config.get("api_key_env", "OPENAI_API_KEY"), "")
+        
+        # 创建新的客户端实例（如果需要）
+        if base_url and base_url != "https://api.openai.com/v1" or api_key != os.environ.get("OPENAI_API_KEY", ""):
             client = openai.OpenAI(
-                api_key=os.environ.get(model_config.get("api_key_env", "OPENAI_API_KEY"), ""),
+                api_key=api_key,
                 base_url=base_url
             )
         else:
             client = self.openai_client
         
-        response = client.chat.completions.create(
-            model=model_config.get("model", "gpt-3.5-turbo"),
-            messages=[
-                {"role": "system", "content": "你是一个专业的建筑设计师助手，帮助用户设计建筑布局。你的回答应该基于专业知识，并考虑用户的个性化需求。"},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
+        # 添加重试逻辑
+        max_retries = 3
+        retry_delay = 2
         
-        return response.choices[0].message.content
+        for attempt in range(max_retries):
+            try:
+                response = client.chat.completions.create(
+                    model=model_config.get("model", "gpt-3.5-turbo"),
+                    messages=[
+                        {"role": "system", "content": "你是一个专业的建筑设计师助手，帮助用户设计建筑布局。你的回答应该基于专业知识，并考虑用户的个性化需求。"},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=temperature,
+                    max_tokens=max_tokens
+                )
+                return response.choices[0].message.content
+                
+            except Exception as e:
+                if "rate_limit" in str(e).lower() and attempt < max_retries - 1:
+                    wait_time = retry_delay * (2 ** attempt)  # 指数退避
+                    print(f"达到API速率限制，等待{wait_time}秒后重试...")
+                    time.sleep(wait_time)
+                    continue
+                raise  # 重新抛出其他类型的异常
     
     def _call_anthropic_api(self, prompt, model_config, temperature, max_tokens):
         """调用Anthropic API
@@ -231,5 +247,5 @@ class OpenAIClient:
             else:
                 raise Exception(f"智谱AI API返回错误: {result}")
         else:
-            raise Exception(f"智谱AI API错误: {response.status_code}, {response.text}") 
+            raise Exception(f"智谱AI API错误: {response.status_code}, {response.text}")
         

@@ -6,7 +6,7 @@
 AVAILABLE_MODELS = {
     # 腾讯云deepseek-v3
     "deepseek-v3": {
-        "type": "deepseek",
+        "type": "openai",
         "model": "deepseek-v3",
         "base_url": "https://api.lkeap.cloud.tencent.com/v1",
         "api_key_env": "TENCENT_DEEPSEEK_API_KEY",
@@ -14,11 +14,12 @@ AVAILABLE_MODELS = {
         },
     # 腾讯云deepseek-r1
     "deepseek-r1": {
-        "type": "deepseek",
+        "type": "openai",
         "model": "deepseek-r1",
         "base_url": "https://api.lkeap.cloud.tencent.com/v1",
         "api_key_env": "TENCENT_DEEPSEEK_API_KEY",
-        "max_tokens": 2000
+        "max_tokens": 2000,
+        "temperature": 0.7
     },
     
     # OpenAI模型
@@ -170,4 +171,4 @@ all格式约束条件：
 {template_rooms}
 
 请确保转换过程中不丢失任何信息，并保持约束条件的完整性和一致性。
-""" 
+"""
