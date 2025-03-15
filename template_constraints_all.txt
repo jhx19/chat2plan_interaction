@@ -1,0 +1,31 @@
+{
+  "hard_constraints": {
+    "room_list": []
+  }, 
+  "soft_constraints": {
+    "connection": {
+      "weight": 0.0,
+      "constraints": []
+    },
+    "area": {
+      "weight": 0.0,
+      "constraints": []
+    },
+    "orientation": {
+      "weight": 0.0,
+      "constraints": []
+    },
+    "window_access": {
+      "weight": 0.0,
+      "constraints": []
+    },
+    "aspect_ratio": {
+      "weight": 0.0,
+      "constraints": []
+    },
+    "repulsion": {
+      "weight": 0.0,
+      "constraints": []
+    }
+  }
+} 
