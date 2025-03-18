@@ -61,10 +61,16 @@ class ConstraintQuantification:
         
         # 尝试解析响应为JSON
         try:
-            # 提取响应中的JSON部分（如果有）
-            json_str = self._extract_json(response)
-            constraints = json.loads(json_str)
-            return constraints
+            # 首先尝试直接解析为JSON
+            result = json.loads(response)
+            # 检查是否包含constraints字段
+            if "constraints" in result:
+                return result["constraints"]
+            else:
+                # 尝试提取响应中的JSON部分（如果有）
+                json_str = self._extract_json(response)
+                constraints = json.loads(json_str)
+                return constraints
         except json.JSONDecodeError:
             print("警告：无法解析生成的约束条件为JSON格式。使用默认约束条件。")
             return constraint_template
@@ -123,4 +129,4 @@ class ConstraintQuantification:
                     return text[start_idx:i+1]
         
         # 如果没有找到匹配的结束括号，返回空JSON
-        return "{}" 
+        return "{}"

@@ -24,7 +24,7 @@ class QuestionGeneration:
         self.openai_client = openai_client
     
     def generate_question(self, current_requirement_guess, key_questions):
-        """生成下一个问题
+        """生成下一个问题并更新关键问题状态
         
         Args:
             current_requirement_guess (str): 当前的用户需求猜测
@@ -35,7 +35,7 @@ class QuestionGeneration:
         """
         # 如果没有用户需求猜测，生成初始问题
         if not current_requirement_guess or current_requirement_guess == "目前没有关于用户需求的猜测。":
-            return "请您先告诉我您的建筑项目的基本情况，比如是什么类型的建筑？大致的占地面积有多少？"
+            return "请您先告诉我您的建筑项目的基本情况和需求。"
         
         # 格式化关键问题列表，便于提供给LLM
         key_questions_formatted = self._format_key_questions(key_questions)
@@ -46,7 +46,7 @@ class QuestionGeneration:
             key_questions_formatted=key_questions_formatted
         )
         
-        # 调用API生成下一个问题，使用指定模型
+        # 调用API生成下一个问题并同时更新关键问题状态，使用指定模型
         response = self.openai_client.generate_completion(
             prompt=prompt,
             model_name=QUESTION_GENERATION_MODEL,  # 使用为问题生成指定的模型
@@ -57,6 +57,26 @@ class QuestionGeneration:
         if not response:
             return "能否再详细描述一下您对这个建筑设计的期望和需求？"
         
+        # 尝试解析JSON响应
+        try:
+            result = json.loads(response)
+            if "question" in result:
+                # 如果响应中包含categories信息，则更新关键问题状态
+                if "categories" in result:
+                    for category_result in result["categories"]:
+                        category_name = category_result.get("category")
+                        status = category_result.get("status")
+                        
+                        # 查找对应的类别并更新状态
+                        for category in key_questions:
+                            if category["category"] == category_name and status == "已知":
+                                category["status"] = "已知"
+                
+                return result["question"]
+        except json.JSONDecodeError:
+            # 如果不是JSON格式，则按照原来的方式处理
+            pass
+            
         # 返回生成的问题
         return response.strip()
     
@@ -77,4 +97,4 @@ class QuestionGeneration:
                 formatted_questions += f"- {question['question']} (状态：{question['status']})\n"
             formatted_questions += "\n"
         
-        return formatted_questions 
+        return formatted_questions

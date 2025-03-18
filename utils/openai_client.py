@@ -30,6 +30,29 @@ class OpenAIClient:
         
         # 缓存获取的访问令牌
         self.access_tokens = {}
+        
+        # 记录token使用量
+        self.session_manager = None
+    
+    def set_session_manager(self, session_manager):
+        """设置会话记录管理器
+        
+        Args:
+            session_manager: SessionManager实例
+        """
+        self.session_manager = session_manager
+    
+    def _record_api_call(self, model_name, prompt, response, tokens_used):
+        """记录API调用信息
+        
+        Args:
+            model_name (str): 使用的模型名称
+            prompt (str): 发送的提示词
+            response (str): 收到的回应
+            tokens_used (dict): 使用的token数量
+        """
+        if self.session_manager:
+            self.session_manager.add_api_call(model_name, prompt, response, tokens_used)
     
     def _check_api_keys(self):
         """检查环境变量中的API密钥"""
@@ -144,17 +167,27 @@ class OpenAIClient:
         max_retries = 3
         retry_delay = 2
         
+        # 导入配置参数，用于控制是否强制输出JSON格式
+        from config import FORCE_JSON_OUTPUT, RESPONSE_FORMAT
+        
         for attempt in range(max_retries):
             try:
-                response = client.chat.completions.create(
-                    model=model_config.get("model", "gpt-3.5-turbo"),
-                    messages=[
+                # 创建API调用参数
+                api_params = {
+                    "model": model_config.get("model", "gpt-3.5-turbo"),
+                    "messages": [
                         {"role": "system", "content": "你是一个专业的建筑设计师助手，帮助用户设计建筑布局。你的回答应该基于专业知识，并考虑用户的个性化需求。"},
                         {"role": "user", "content": prompt}
                     ],
-                    temperature=temperature,
-                    max_tokens=max_tokens
-                )
+                    "temperature": temperature,
+                    "max_tokens": max_tokens
+                }
+                
+                # 如果需要强制输出JSON格式
+                if FORCE_JSON_OUTPUT:
+                    api_params["response_format"] = {"type": RESPONSE_FORMAT}
+                
+                response = client.chat.completions.create(**api_params)
                 return response.choices[0].message.content
                 
             except Exception as e:

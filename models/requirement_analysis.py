@@ -23,7 +23,7 @@ class RequirementAnalysis:
         self.openai_client = openai_client
     
     def process(self, user_input, current_requirement_guess, spatial_understanding):
-        """处理用户输入，更新用户需求猜测
+        """处理用户输入，更新用户需求猜测和空间理解
         
         Args:
             user_input (str): 用户输入的文本
@@ -31,7 +31,7 @@ class RequirementAnalysis:
             spatial_understanding (str): 当前的空间理解记录
         
         Returns:
-            str: 更新后的用户需求猜测
+            dict: 包含更新后的用户需求猜测、空间理解记录和更新状态的JSON对象
         """
         # 如果当前没有用户需求猜测，则初始化为空字符串
         if not current_requirement_guess:
@@ -53,16 +53,58 @@ class RequirementAnalysis:
         
         # 如果API调用失败或返回为空，则保持原猜测不变
         if not response:
-            return current_requirement_guess
+            return {
+                "requirement": {
+                    "content": current_requirement_guess,
+                    "updated": False
+                },
+                "spatial_understanding": {
+                    "content": spatial_understanding,
+                    "updated": False
+                }
+            }
+        
+        # 尝试解析响应为JSON
+        try:
+            # 首先尝试直接解析为JSON
+            result = json.loads(response)
+            # 验证JSON结构是否符合预期
+            if "spatial_updated" in result and "requirement_updated" in result:
+                # 构建返回结果
+                return {
+                    "requirement": {
+                        "content": result.get("requirement_guess", current_requirement_guess),
+                        "updated": result.get("requirement_updated", False)
+                    },
+                    "spatial_understanding": {
+                        "content": result.get("spatial_understanding", spatial_understanding),
+                        "updated": result.get("spatial_updated", False)
+                    }
+                }
+        except json.JSONDecodeError:
+            # 如果不是JSON格式，则按照原来的方式处理
+            pass
         
         # 处理并返回更新后的用户需求猜测
         updated_requirement_guess = response.strip()
         
         # 检查是否有实质性更新
+        requirement_updated = updated_requirement_guess != current_requirement_guess
         if updated_requirement_guess == "目前没有关于用户需求的猜测。" and current_requirement_guess != updated_requirement_guess:
-            return current_requirement_guess
+            requirement_updated = False
+            updated_requirement_guess = current_requirement_guess
         
-        return updated_requirement_guess
+        # 返回JSON格式的结果
+        return {
+            "requirement": {
+                "content": updated_requirement_guess,
+                "updated": requirement_updated
+            },
+            "spatial_understanding": {
+                "content": spatial_understanding,
+                "updated": False
+            }
+        }
     
     def check_question_answered(self, question, requirement_guess):
         """检查问题是否已在用户需求猜测中得到回答
@@ -95,8 +137,12 @@ class RequirementAnalysis:
         if not response:
             return False
         
-        # 处理响应
-        response = response.strip().lower()
-        
-        # 根据响应判断问题是否已回答
-        return "是" in response 
+        # 尝试解析JSON响应
+        try:
+            result = json.loads(response)
+            if "answered" in result:
+                return result["answered"]
+        except json.JSONDecodeError:
+            # 如果不是JSON格式，则按照原来的方式处理
+            response = response.strip().lower()
+            return "是" in response

@@ -8,6 +8,7 @@ from models.constraint_quantification import ConstraintQuantification
 from utils.openai_client import OpenAIClient
 from utils.json_handler import JsonHandler
 from utils.converter import ConstraintConverter
+from utils.session_manager import SessionManager
 
 # 加载环境变量（包括OpenAI API密钥）
 load_dotenv()
@@ -17,6 +18,9 @@ class ArchitectureAISystem:
     
     def __init__(self):
         """初始化系统各组件"""
+        # 初始化会话记录管理器
+        self.session_manager = SessionManager()
+        
         # 初始化OpenAI客户端
         self.openai_client = OpenAIClient()
         
@@ -57,51 +61,58 @@ class ArchitectureAISystem:
         self.key_questions = [
             {
                 "category": "房间数量和类型",
-                "questions": [
-                    {"question": "您需要哪些类型的房间？", "status": "未知"}
-                ]
+                "status": "未知"
+                # "questions": [
+                #     {"question": "您需要哪些类型的房间？", "status": "未知"}
+                # ]
             },
             {
-                "category": "住户信息",
-                "questions": [
-                    {"question": "这个住宅将容纳多少人？家庭成员构成如何？", "status": "未知"},
-                    {"question": "您对未来的家庭规划有什么考虑？", "status": "未知"}
-                ]
+                "category": "住户信息",                
+                "status": "未知"
+                # "questions": [
+                #     {"question": "这个住宅将容纳多少人？家庭成员构成如何？", "status": "未知"},
+                #     {"question": "您对未来的家庭规划有什么考虑？", "status": "未知"}
+                # ]
             },
             {
                 "category": "生活方式",
-                "questions": [
-                    {"question": "您更偏好社交空间还是私人空间？", "status": "未知"},
-                    {"question": "您在家中会做饭吗？频率如何？", "status": "未知"},
-                    {"question": "您是否需要在家工作的空间？", "status": "未知"}
-                ]
+                "status": "未知"
+                # "questions": [
+                # #     {"question": "您更偏好社交空间还是私人空间？", "status": "未知"},
+                # #     {"question": "您在家中会做饭吗？频率如何？", "status": "未知"},
+                # #     {"question": "您是否需要在家工作的空间？", "status": "未知"}
+                # # ]
             },
             {
                 "category": "空间使用偏好",
-                "questions": [
-                    {"question": "您喜欢明亮开放的空间还是独立封闭的空间？", "status": "未知"},
-                    {"question": "您对采光有什么特别的要求？", "status": "未知"}
-                ]
+                "status": "未知"
+                # "questions": [
+                #     {"question": "您喜欢明亮开放的空间还是独立封闭的空间？", "status": "未知"},
+                #     {"question": "您对采光有什么特别的要求？", "status": "未知"}
+                # ]
             },
             {
                 "category": "功能需求",
-                "questions": [
-                    {"question": "您需要专门的储物空间吗？", "status": "未知"},
-                    {"question": "您有特殊的爱好需要专门空间吗？", "status": "未知"}
-                ]
+                "status": "未知"
+                # "questions": [
+                #     {"question": "您需要专门的储物空间吗？", "status": "未知"},
+                #     {"question": "您有特殊的爱好需要专门空间吗？", "status": "未知"}
+                # ]
             },
             {
-                "category": "环境应对",
-                "questions": [
-                    {"question": "您对噪音敏感吗？需要特别的隔音设计吗？", "status": "未知"},
-                    {"question": "您希望拥有室外空间（如阳台）吗？", "status": "未知"}
-                ]
+                "category": "环境应对要求",
+                "status": "未知"
+                # "questions": [
+                #     {"question": "您对噪音敏感吗？需要特别的隔音设计吗？", "status": "未知"},
+                #     {"question": "您希望拥有室外空间（如阳台）吗？", "status": "未知"}
+                # ]
             },
             {
                 "category": "其他特殊需求",
-                "questions": [
-                    {"question": "您还有其他特殊的设计需求吗？", "status": "未知"}
-                ]
+                "status": "未知"
+                # "questions": [
+                #     {"question": "您还有其他特殊的设计需求吗？", "status": "未知"}
+                # ]
             }
         ]
     
@@ -137,8 +148,8 @@ class ArchitectureAISystem:
             # 获取用户输入
             user_input = input("用户: ")
             
-            # 记录用户输入到对话历史
-            self.conversation_history.append({"role": "user", "content": user_input})
+            # 记录用户输入
+            self.session_manager.add_user_input(user_input)
             
             # 检查是否退出
             if user_input.lower() in ["退出", "结束", "quit", "exit"]:
@@ -149,10 +160,10 @@ class ArchitectureAISystem:
             response = self.process_user_input(user_input)
             
             # 输出系统回应
-            print(f"系统: {response}")
+            print(f"Chat2Plan: {response}")
             
-            # 记录系统回应到对话历史
-            self.conversation_history.append({"role": "system", "content": response})
+            # 记录系统回应
+            self.session_manager.add_system_response(response)
             
             # 检查是否所有关键问题已解决，可以进入约束条件量化阶段
             if self.all_key_questions_resolved():
@@ -161,35 +172,59 @@ class ArchitectureAISystem:
                 print("\n根据我们的对话，我已经为您生成了设计约束条件:")
                 print(json.dumps(constraints_json, ensure_ascii=False, indent=2))
                 
+                # 保存最终结果
+                self.session_manager.set_final_result({
+                    "constraints": constraints_json,
+                    "solver_status": "not_implemented"
+                })
+                
                 # 调用求解器（只保留接口）
                 print("\n正在调用求解器生成布局方案...")
                 # solver_result = self.call_solver(constraints_json)
-                
-                # 打印结果（示例）
-                # print("布局方案已生成!")
                 
                 break
     
     def process_user_input(self, user_input):
         """处理用户输入，调用相应模块，返回系统回应"""
-        # 1. 空间理解：解析用户输入的建筑边界和环境信息
-        updated_spatial_understanding = self.spatial_understanding.process(
-            user_input, self.spatial_understanding_record
-        )
-        if updated_spatial_understanding != self.spatial_understanding_record:
-            self.spatial_understanding_record = updated_spatial_understanding
+        # 初始阶段：独立处理空间理解
+        if not self.spatial_understanding_record:
+            # 1. 空间理解：解析用户输入的建筑边界和环境信息
+            spatial_understanding_result = self.spatial_understanding.process(
+                user_input, self.spatial_understanding_record
+            )
+            
+            if spatial_understanding_result["updated"]:
+                self.spatial_understanding_record = spatial_understanding_result["content"]
+                # 记录空间理解状态
+                self.session_manager.add_intermediate_state(
+                    "spatial_understanding",
+                    {"content": self.spatial_understanding_record}
+                )
         
-        # 2. 需求分析：根据用户输入和已有信息，推测用户需求
-        updated_user_requirement = self.requirement_analysis.process(
+        # 2. 需求分析：根据用户输入和已有信息，推测用户需求和更新空间理解
+        analysis_result = self.requirement_analysis.process(
             user_input, self.user_requirement_guess, self.spatial_understanding_record
         )
-        if updated_user_requirement != self.user_requirement_guess:
-            self.user_requirement_guess = updated_user_requirement
         
-        # 3. 更新关键问题状态
-        self.update_question_status()
+        # 更新用户需求猜测
+        if analysis_result["requirement"]["updated"]:
+            self.user_requirement_guess = analysis_result["requirement"]["content"]
+            # 记录需求分析状态
+            self.session_manager.add_intermediate_state(
+                "user_requirement",
+                {"content": self.user_requirement_guess}
+            )
         
-        # 4. 提问：生成下一个问题
+        # 更新空间理解记录（如果在交互循环中有更新）
+        if analysis_result["spatial_understanding"]["updated"]:
+            self.spatial_understanding_record = analysis_result["spatial_understanding"]["content"]
+            # 记录空间理解状态
+            self.session_manager.add_intermediate_state(
+                "spatial_understanding",
+                {"content": self.spatial_understanding_record}
+            )
+        
+        # 提问：生成下一个问题（同时更新关键问题状态）
         next_question = self.question_generation.generate_question(
             self.user_requirement_guess, self.key_questions
         )
@@ -239,4 +274,4 @@ class ArchitectureAISystem:
 
 if __name__ == "__main__":
     system = ArchitectureAISystem()
-    system.start_interaction() 
+    system.start_interaction()
