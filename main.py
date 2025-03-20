@@ -138,10 +138,86 @@ class ArchitectureAISystem:
             else:  # template_constraints_rooms.txt
                 return {"rooms": {}}
     
+    def load_input_json(self, file_path="input.json"):
+        """从JSON文件加载初始输入数据
+        
+        Args:
+            file_path (str): JSON文件路径
+            
+        Returns:
+            dict: 包含spatial_info和user_requirement的字典，如果加载失败则返回None
+        """
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return data
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            print(f"加载初始输入文件失败: {e}")
+            return None
+    
     def start_interaction(self):
         """开始交互流程"""
         print("欢迎使用建筑布局设计AI系统！")
-        print("请描述您的建筑边界和环境信息，我将帮助您设计布局。")
+        
+        # 尝试从input.json加载初始输入
+        input_data = self.load_input_json()
+        
+        # 如果成功加载了初始输入
+        if input_data and "spatial_info" in input_data and "user_requirement" in input_data:
+            print("已从input.json加载初始输入数据。")
+            
+            # 处理空间信息
+            spatial_info = input_data["spatial_info"]
+            self.session_manager.add_user_input(spatial_info)
+            spatial_understanding_result = self.spatial_understanding.process(
+                spatial_info, self.spatial_understanding_record
+            )
+            if spatial_understanding_result["updated"]:
+                self.spatial_understanding_record = spatial_understanding_result["content"]
+                self.session_manager.update_spatial_understanding(
+                    {"content": self.spatial_understanding_record},
+                    spatial_info
+                )
+            
+            # 处理用户需求
+            user_requirement = input_data["user_requirement"]
+            self.session_manager.add_user_input(user_requirement)
+            analysis_result = self.requirement_analysis.process(
+                user_requirement, self.user_requirement_guess, self.spatial_understanding_record
+            )
+            
+            # 更新用户需求猜测
+            if analysis_result["requirement"]["updated"]:
+                self.user_requirement_guess = analysis_result["requirement"]["content"]
+                self.session_manager.update_user_requirements(
+                    {"content": self.user_requirement_guess},
+                    user_requirement
+                )
+            
+            # 更新空间理解记录（如果在处理需求时有更新）
+            if analysis_result["spatial_understanding"]["updated"]:
+                self.spatial_understanding_record = analysis_result["spatial_understanding"]["content"]
+                self.session_manager.update_spatial_understanding(
+                    {"content": self.spatial_understanding_record},
+                    user_requirement
+                )
+            
+            # 生成第一个问题
+            next_question = self.question_generation.generate_question(
+                self.user_requirement_guess, self.key_questions
+            )
+            
+            # 记录关键问题状态
+            self.session_manager.update_key_questions(
+                {"questions": self.key_questions},
+                user_requirement
+            )
+            
+            # 输出系统回应
+            print(f"Chat2Plan: {next_question}")
+            self.session_manager.add_system_response(next_question)
+        else:
+            print("未找到有效的初始输入文件，请描述您的建筑边界和环境信息。")
         
         # 主交互循环
         while True:
@@ -186,22 +262,8 @@ class ArchitectureAISystem:
     
     def process_user_input(self, user_input):
         """处理用户输入，调用相应模块，返回系统回应"""
-        # 初始阶段：独立处理空间理解
-        if not self.spatial_understanding_record:
-            # 1. 空间理解：解析用户输入的建筑边界和环境信息
-            spatial_understanding_result = self.spatial_understanding.process(
-                user_input, self.spatial_understanding_record
-            )
-            
-            if spatial_understanding_result["updated"]:
-                self.spatial_understanding_record = spatial_understanding_result["content"]
-                # 记录空间理解状态
-                self.session_manager.update_spatial_understanding(
-                    {"content": self.spatial_understanding_record},
-                    user_input
-                )
         
-        # 2. 需求分析：根据用户输入和已有信息，推测用户需求和更新空间理解
+        # 需求分析：根据用户输入和已有信息，推测用户需求和更新空间理解
         analysis_result = self.requirement_analysis.process(
             user_input, self.user_requirement_guess, self.spatial_understanding_record
         )

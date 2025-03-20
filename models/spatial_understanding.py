@@ -55,20 +55,29 @@ class SpatialUnderstanding:
                 "updated": False
             }
         
-        # 处理并返回更新后的空间理解记录
-        updated_spatial_understanding = response.strip()
-        
-        # 检查是否有实质性更新
-        if updated_spatial_understanding == "目前没有关于建筑边界和环境的信息。" and current_spatial_understanding != updated_spatial_understanding:
+        # 解析API返回的JSON响应
+        try:
+            result = json.loads(response)
+            updated_spatial_understanding = result.get("spatial_understanding", "")
+            
+            # 检查是否有实质性更新
+            if not updated_spatial_understanding:
+                return {
+                    "content": current_spatial_understanding,
+                    "updated": False
+                }
+            
+            # 检查是否有实质性更新
+            is_updated = updated_spatial_understanding != current_spatial_understanding
+            
+            return {
+                "content": updated_spatial_understanding,
+                "updated": is_updated
+            }
+        except json.JSONDecodeError:
+            # 如果JSON解析失败，返回原记录
             return {
                 "content": current_spatial_understanding,
                 "updated": False
             }
         
-        # 检查是否有实质性更新
-        is_updated = updated_spatial_understanding != current_spatial_understanding
-        
-        return {
-            "content": updated_spatial_understanding,
-            "updated": is_updated
-        }
