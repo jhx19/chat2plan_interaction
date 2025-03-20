@@ -32,6 +32,15 @@ class SessionManager:
             'intermediate_states': [],
             'final_result': None
         }
+        
+        # 初始化四个关键模块的记录
+        self.spatial_understanding = {}
+        self.user_requirements = {}
+        self.key_questions = {}
+        self.constraints = {}
+        
+        # 创建四个模块的历史记录和最终状态文件
+        self._create_module_files()
     
     def add_user_input(self, user_input):
         """记录用户输入
@@ -129,3 +138,171 @@ class SessionManager:
             str: 会话目录的绝对路径
         """
         return self.session_dir
+    
+    def _create_module_files(self):
+        """创建四个模块的历史记录和最终状态文件"""
+        # 创建最终状态文件
+        self.final_state_path = os.path.join(self.session_dir, 'final_state.json')
+        final_state = {
+            'spatial_understanding': {},
+            'user_requirements': {},
+            'key_questions': {},
+            'constraints': {}
+        }
+        with open(self.final_state_path, 'w', encoding='utf-8') as f:
+            json.dump(final_state, f, ensure_ascii=False, indent=2)
+        
+        # 创建四个模块的历史记录文件
+        self.history_files = {
+            'spatial_understanding': os.path.join(self.session_dir, 'spatial_understanding_history.json'),
+            'user_requirements': os.path.join(self.session_dir, 'user_requirements_history.json'),
+            'key_questions': os.path.join(self.session_dir, 'key_questions_history.json'),
+            'constraints': os.path.join(self.session_dir, 'constraints_history.json')
+        }
+        
+        # 初始化历史记录文件
+        for file_path in self.history_files.values():
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump([], f, ensure_ascii=False, indent=2)
+    
+    def update_spatial_understanding(self, content, user_input=None):
+        """更新空间理解内容
+        
+        Args:
+            content (dict): 空间理解的内容
+            user_input (str, optional): 触发更新的用户输入
+        """
+        # 更新内存中的空间理解
+        self.spatial_understanding = content
+        
+        # 更新最终状态文件
+        self._update_final_state('spatial_understanding', content)
+        
+        # 添加到历史记录
+        self._add_to_history('spatial_understanding', content, user_input)
+    
+    def update_user_requirements(self, content, user_input=None):
+        """更新用户需求猜测内容
+        
+        Args:
+            content (dict): 用户需求猜测的内容
+            user_input (str, optional): 触发更新的用户输入
+        """
+        # 更新内存中的用户需求猜测
+        self.user_requirements = content
+        
+        # 更新最终状态文件
+        self._update_final_state('user_requirements', content)
+        
+        # 添加到历史记录
+        self._add_to_history('user_requirements', content, user_input)
+    
+    def update_key_questions(self, content, user_input=None):
+        """更新关键问题列表内容
+        
+        Args:
+            content (dict): 关键问题列表的内容
+            user_input (str, optional): 触发更新的用户输入
+        """
+        # 更新内存中的关键问题列表
+        self.key_questions = content
+        
+        # 更新最终状态文件
+        self._update_final_state('key_questions', content)
+        
+        # 添加到历史记录
+        self._add_to_history('key_questions', content, user_input)
+    
+    def update_constraints(self, content, user_input=None):
+        """更新约束条件内容
+        
+        Args:
+            content (dict): 约束条件的内容
+            user_input (str, optional): 触发更新的用户输入
+        """
+        # 更新内存中的约束条件
+        self.constraints = content
+        
+        # 更新最终状态文件
+        self._update_final_state('constraints', content)
+        
+        # 添加到历史记录
+        self._add_to_history('constraints', content, user_input)
+    
+    def _update_final_state(self, module_name, content):
+        """更新最终状态文件中的指定模块
+        
+        Args:
+            module_name (str): 模块名称
+            content (dict): 模块内容
+        """
+        # 读取当前最终状态
+        with open(self.final_state_path, 'r', encoding='utf-8') as f:
+            final_state = json.load(f)
+        
+        # 更新指定模块
+        final_state[module_name] = content
+        
+        # 保存更新后的最终状态
+        with open(self.final_state_path, 'w', encoding='utf-8') as f:
+            json.dump(final_state, f, ensure_ascii=False, indent=2)
+    
+    def _add_to_history(self, module_name, content, user_input=None):
+        """添加模块更新记录到历史文件
+        
+        Args:
+            module_name (str): 模块名称
+            content (dict): 模块内容
+            user_input (str, optional): 触发更新的用户输入
+        """
+        # 读取当前历史记录
+        history_path = self.history_files[module_name]
+        with open(history_path, 'r', encoding='utf-8') as f:
+            history = json.load(f)
+        
+        # 创建新的历史记录
+        record = {
+            'timestamp': datetime.now().isoformat(),
+            'content': content
+        }
+        
+        # 如果有触发更新的用户输入，则添加到记录中
+        if user_input:
+            record['user_input'] = user_input
+        
+        # 添加到历史记录
+        history.append(record)
+        
+        # 保存更新后的历史记录
+        with open(history_path, 'w', encoding='utf-8') as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+    
+    def get_module_final_state(self, module_name):
+        """获取指定模块的最终状态
+        
+        Args:
+            module_name (str): 模块名称，可选值为'spatial_understanding', 'user_requirements', 'key_questions', 'constraints'
+            
+        Returns:
+            dict: 模块的最终状态
+        """
+        with open(self.final_state_path, 'r', encoding='utf-8') as f:
+            final_state = json.load(f)
+        return final_state.get(module_name, {})
+    
+    def get_module_history(self, module_name):
+        """获取指定模块的历史记录
+        
+        Args:
+            module_name (str): 模块名称，可选值为'spatial_understanding', 'user_requirements', 'key_questions', 'constraints'
+            
+        Returns:
+            list: 模块的历史记录列表
+        """
+        history_path = self.history_files.get(module_name)
+        if not history_path:
+            return []
+        
+        with open(history_path, 'r', encoding='utf-8') as f:
+            history = json.load(f)
+        return history

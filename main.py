@@ -196,9 +196,9 @@ class ArchitectureAISystem:
             if spatial_understanding_result["updated"]:
                 self.spatial_understanding_record = spatial_understanding_result["content"]
                 # 记录空间理解状态
-                self.session_manager.add_intermediate_state(
-                    "spatial_understanding",
-                    {"content": self.spatial_understanding_record}
+                self.session_manager.update_spatial_understanding(
+                    {"content": self.spatial_understanding_record},
+                    user_input
                 )
         
         # 2. 需求分析：根据用户输入和已有信息，推测用户需求和更新空间理解
@@ -210,23 +210,29 @@ class ArchitectureAISystem:
         if analysis_result["requirement"]["updated"]:
             self.user_requirement_guess = analysis_result["requirement"]["content"]
             # 记录需求分析状态
-            self.session_manager.add_intermediate_state(
-                "user_requirement",
-                {"content": self.user_requirement_guess}
+            self.session_manager.update_user_requirements(
+                {"content": self.user_requirement_guess},
+                user_input
             )
         
         # 更新空间理解记录（如果在交互循环中有更新）
         if analysis_result["spatial_understanding"]["updated"]:
             self.spatial_understanding_record = analysis_result["spatial_understanding"]["content"]
             # 记录空间理解状态
-            self.session_manager.add_intermediate_state(
-                "spatial_understanding",
-                {"content": self.spatial_understanding_record}
+            self.session_manager.update_spatial_understanding(
+                {"content": self.spatial_understanding_record},
+                user_input
             )
         
         # 提问：生成下一个问题（同时更新关键问题状态）
         next_question = self.question_generation.generate_question(
             self.user_requirement_guess, self.key_questions
+        )
+        
+        # 记录关键问题状态
+        self.session_manager.update_key_questions(
+            {"questions": self.key_questions},
+            user_input
         )
         
         return next_question
@@ -263,6 +269,11 @@ class ArchitectureAISystem:
         # 保存约束条件
         self.constraints_all = constraints_all
         self.constraints_rooms = constraints_rooms
+        
+        # 记录约束条件状态
+        self.session_manager.update_constraints(
+            {"all": constraints_all, "rooms": constraints_rooms}
+        )
         
         return constraints_all
     
