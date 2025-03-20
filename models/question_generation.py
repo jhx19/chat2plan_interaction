@@ -7,7 +7,7 @@ import json
 # 添加项目根目录到Python路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import QUESTION_GENERATION_PROMPT, QUESTION_GENERATION_TEMPERATURE
+from config import BASE_PROMPT, QUESTION_GENERATION_PROMPT, QUESTION_GENERATION_TEMPERATURE
 from config import QUESTION_GENERATION_MODEL
 
 class QuestionGeneration:
@@ -42,6 +42,7 @@ class QuestionGeneration:
         
         # 准备提示词
         prompt = QUESTION_GENERATION_PROMPT.format(
+            base_prompt=BASE_PROMPT,
             current_requirement_guess=current_requirement_guess,
             key_questions_formatted=key_questions_formatted
         )
@@ -85,9 +86,7 @@ class QuestionGeneration:
         formatted_questions = ""
         
         for category in key_questions:
-            formatted_questions += f"类别：{category['category']}\n"
-            for question in category['questions']:
-                formatted_questions += f"- {question['question']} (状态：{question['status']})\n"
-            formatted_questions += "\n"
+            formatted_questions += f"关键问题类别：{category['category']} (状态：{category['status']})"
+            formatted_questions += "\n\n"
         
         return formatted_questions

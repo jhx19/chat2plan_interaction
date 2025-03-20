@@ -95,18 +95,25 @@ class SessionManager:
         
         self._save_session_record()
     
-    def add_intermediate_state(self, state_name, state_data):
+    def add_intermediate_state(self, state_name, state_data, update_type=None):
         """记录中间状态
         
         Args:
             state_name (str): 状态名称
             state_data (dict): 状态数据
+            update_type (str, optional): 更新内容类型，如'spatial_understanding'、'user_requirements'等
         """
-        self.session_record['intermediate_states'].append({
+        state_record = {
             'timestamp': datetime.now().isoformat(),
             'name': state_name,
             'data': state_data
-        })
+        }
+        
+        # 如果提供了更新类型，则添加到记录中
+        if update_type:
+            state_record['update_type'] = update_type
+            
+        self.session_record['intermediate_states'].append(state_record)
         self._save_session_record()
     
     def set_final_result(self, result):
@@ -263,7 +270,8 @@ class SessionManager:
         # 创建新的历史记录
         record = {
             'timestamp': datetime.now().isoformat(),
-            'content': content
+            'content': content,
+            'update_type': module_name  # 添加更新内容类型
         }
         
         # 如果有触发更新的用户输入，则添加到记录中
@@ -276,6 +284,9 @@ class SessionManager:
         # 保存更新后的历史记录
         with open(history_path, 'w', encoding='utf-8') as f:
             json.dump(history, f, ensure_ascii=False, indent=2)
+            
+        # 同时添加到session_record的intermediate_states中
+        self.add_intermediate_state(f"{module_name}_update", content, module_name)
     
     def get_module_final_state(self, module_name):
         """获取指定模块的最终状态

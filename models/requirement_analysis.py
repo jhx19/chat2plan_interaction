@@ -3,10 +3,11 @@
 """
 import sys
 import os
+import json
 # 添加项目根目录到Python路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import REQUIREMENT_ANALYSIS_PROMPT, REQUIREMENT_ANALYSIS_TEMPERATURE, CHECK_QUESTION_ANSWERED_PROMPT
+from config import BASE_PROMPT, REQUIREMENT_ANALYSIS_PROMPT, REQUIREMENT_ANALYSIS_TEMPERATURE, CHECK_QUESTION_ANSWERED_PROMPT
 from config import REQUIREMENT_ANALYSIS_MODEL
 
 class RequirementAnalysis:
@@ -39,6 +40,7 @@ class RequirementAnalysis:
         
         # 准备提示词
         prompt = REQUIREMENT_ANALYSIS_PROMPT.format(
+            base_prompt=BASE_PROMPT,
             user_input=user_input,
             current_requirement_guess=current_requirement_guess,
             spatial_understanding=spatial_understanding
@@ -65,7 +67,21 @@ class RequirementAnalysis:
             }
         
         # 处理API返回的JSON响应
-        result = json.loads(response)
+        try:
+            result = json.loads(response)
+        except json.JSONDecodeError as e:
+            print(f"JSON解析错误: {str(e)}\n响应内容: {response}")
+            # 返回原始数据，不进行更新
+            return {
+                "requirement": {
+                    "content": current_requirement_guess,
+                    "updated": False
+                },
+                "spatial_understanding": {
+                    "content": spatial_understanding,
+                    "updated": False
+                }
+            }
         
         # 返回JSON格式的结果
         return {

@@ -3,10 +3,11 @@
 """
 import sys
 import os
+import json
 # 添加项目根目录到Python路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import SPATIAL_UNDERSTANDING_PROMPT, SPATIAL_UNDERSTANDING_TEMPERATURE, SPATIAL_UNDERSTANDING_MODEL
+from config import BASE_PROMPT, SPATIAL_UNDERSTANDING_PROMPT, SPATIAL_UNDERSTANDING_TEMPERATURE, SPATIAL_UNDERSTANDING_MODEL
 
 class SpatialUnderstanding:
     """
@@ -37,6 +38,7 @@ class SpatialUnderstanding:
         
         # 准备提示词
         prompt = SPATIAL_UNDERSTANDING_PROMPT.format(
+            base_prompt=BASE_PROMPT,
             user_input=user_input,
             current_spatial_understanding=current_spatial_understanding
         )

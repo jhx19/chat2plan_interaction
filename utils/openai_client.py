@@ -195,7 +195,21 @@ class OpenAIClient:
                     api_params["response_format"] = {"type": RESPONSE_FORMAT}
                 
                 response = client.chat.completions.create(**api_params)
-                return response.choices[0].message.content
+                content = response.choices[0].message.content
+                
+                # 清理响应中可能存在的Markdown代码块标记
+                if content.startswith('```'):
+                    # 查找第一个代码块的结束位置
+                    first_block_end = content.find('```', 3)
+                    if first_block_end != -1:
+                        # 提取代码块内容（去除语言标识符）
+                        lang_end = content.find('\n', 3)
+                        if lang_end != -1 and lang_end < first_block_end:
+                            content = content[lang_end+1:first_block_end].strip()
+                        else:
+                            content = content[3:first_block_end].strip()
+                
+                return content
                 
             except Exception as e:
                 if "rate_limit" in str(e).lower() and attempt < max_retries - 1:

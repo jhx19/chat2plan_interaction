@@ -178,6 +178,7 @@ class ArchitectureAISystem:
                     {"content": self.spatial_understanding_record},
                     spatial_info
                 )
+                print("初始空间理解已更新。")
             
             # 处理用户需求
             user_requirement = input_data["user_requirement"]
@@ -193,6 +194,7 @@ class ArchitectureAISystem:
                     {"content": self.user_requirement_guess},
                     user_requirement
                 )
+                print("初始用户需求已更新。")
             
             # 更新空间理解记录（如果在处理需求时有更新）
             if analysis_result["spatial_understanding"]["updated"]:
@@ -201,6 +203,7 @@ class ArchitectureAISystem:
                     {"content": self.spatial_understanding_record},
                     user_requirement
                 )
+                print("空间理解已更新。")
             
             # 生成第一个问题
             next_question = self.question_generation.generate_question(
@@ -276,6 +279,7 @@ class ArchitectureAISystem:
                 {"content": self.user_requirement_guess},
                 user_input
             )
+            print("初始用户需求已更新。")
         
         # 更新空间理解记录（如果在交互循环中有更新）
         if analysis_result["spatial_understanding"]["updated"]:
@@ -285,13 +289,14 @@ class ArchitectureAISystem:
                 {"content": self.spatial_understanding_record},
                 user_input
             )
+            print("空间理解已更新。")
         
         # 提问：生成下一个问题（同时更新关键问题状态）
         next_question = self.question_generation.generate_question(
             self.user_requirement_guess, self.key_questions
         )
         
-        # 记录关键问题状态
+        # 记录关键问题状态（已在generate_question中更新）
         self.session_manager.update_key_questions(
             {"questions": self.key_questions},
             user_input
@@ -300,22 +305,18 @@ class ArchitectureAISystem:
         return next_question
     
     def update_question_status(self):
-        """根据当前的用户需求猜测，更新关键问题列表的状态"""
-        # 使用需求分析模块来检查哪些问题已经有了答案
-        for category in self.key_questions:
-            for question in category["questions"]:
-                is_answered = self.requirement_analysis.check_question_answered(
-                    question["question"], self.user_requirement_guess
-                )
-                if is_answered:
-                    question["status"] = "已知"
+        """根据当前的用户需求猜测，更新关键问题列表的状态
+        
+        注意：此方法已弃用，关键问题状态更新已集成到question_generation.generate_question方法中
+        """
+        # 此方法已弃用，保留方法签名以保持兼容性
+        pass
     
     def all_key_questions_resolved(self):
         """检查是否所有关键问题都已解决"""
         for category in self.key_questions:
-            for question in category["questions"]:
-                if question["status"] == "未知":
-                    return False
+            if category["status"] == "未知":
+                return False
         return True
     
     def finalize_constraints(self):

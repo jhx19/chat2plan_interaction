@@ -8,7 +8,7 @@ import json
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import CONSTRAINT_QUANTIFICATION_PROMPT, CONSTRAINT_QUANTIFICATION_TEMPERATURE
-from config import TEMPLATE_CONSTRAINTS_ALL_PATH, TEMPLATE_CONSTRAINTS_ROOMS_PATH
+from config import BASE_PROMPT, TEMPLATE_CONSTRAINTS_ALL_PATH, TEMPLATE_CONSTRAINTS_ROOMS_PATH
 from config import CONSTRAINT_QUANTIFICATION_MODEL
 
 class ConstraintQuantification:
