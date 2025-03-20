@@ -64,45 +64,18 @@ class RequirementAnalysis:
                 }
             }
         
-        # 尝试解析响应为JSON
-        try:
-            # 首先尝试直接解析为JSON
-            result = json.loads(response)
-            # 验证JSON结构是否符合预期
-            if "spatial_updated" in result and "requirement_updated" in result:
-                # 构建返回结果
-                return {
-                    "requirement": {
-                        "content": result.get("requirement_guess", current_requirement_guess),
-                        "updated": result.get("requirement_updated", False)
-                    },
-                    "spatial_understanding": {
-                        "content": result.get("spatial_understanding", spatial_understanding),
-                        "updated": result.get("spatial_updated", False)
-                    }
-                }
-        except json.JSONDecodeError:
-            # 如果不是JSON格式，则按照原来的方式处理
-            pass
-        
-        # 处理并返回更新后的用户需求猜测
-        updated_requirement_guess = response.strip()
-        
-        # 检查是否有实质性更新
-        requirement_updated = updated_requirement_guess != current_requirement_guess
-        if updated_requirement_guess == "目前没有关于用户需求的猜测。" and current_requirement_guess != updated_requirement_guess:
-            requirement_updated = False
-            updated_requirement_guess = current_requirement_guess
+        # 处理API返回的JSON响应
+        result = json.loads(response)
         
         # 返回JSON格式的结果
         return {
             "requirement": {
-                "content": updated_requirement_guess,
-                "updated": requirement_updated
+                "content": result.get("requirement_guess", current_requirement_guess),
+                "updated": result.get("requirement_updated", False)
             },
             "spatial_understanding": {
-                "content": spatial_understanding,
-                "updated": False
+                "content": result.get("spatial_understanding", spatial_understanding),
+                "updated": result.get("spatial_updated", False)
             }
         }
     

@@ -1,0 +1,20 @@
+{
+  "rooms": {
+    "living_room": {  // room name
+      "connection": [],  // connection requirements to other rooms, can be empty, format:
+                          // ["bedroom", "kitchen"]
+      "area": {},  // area requirements, can be empty, format:
+                    // {"min": 20, "max": 30}
+      "orientation": "",  // orientation requirements, can be empty, format:
+                          // "south"  or other values: ["north", "east", "south", "west"]
+      "window_access": false,  // whether the room needs a window, format:
+                              // true  or false
+      "aspect_ratio": {},  // aspect ratio requirements, can be empty, format:
+                            // {"min": 0.5, "max": 2.0}
+                            // min/max is the range of aspect ratio
+      "repulsion": []  // repulsion requirements to other rooms, can be empty, format:
+                        // ["master_bedroom_bathroom"]
+    }
+    // add more rooms as needed, e.g. "kitchen", "bedroom2"
+  }
+}

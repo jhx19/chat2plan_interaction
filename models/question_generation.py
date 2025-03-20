@@ -57,28 +57,21 @@ class QuestionGeneration:
         if not response:
             return "能否再详细描述一下您对这个建筑设计的期望和需求？"
         
-        # 尝试解析JSON响应
-        try:
-            result = json.loads(response)
-            if "question" in result:
-                # 如果响应中包含categories信息，则更新关键问题状态
-                if "categories" in result:
-                    for category_result in result["categories"]:
-                        category_name = category_result.get("category")
-                        status = category_result.get("status")
-                        
-                        # 查找对应的类别并更新状态
-                        for category in key_questions:
-                            if category["category"] == category_name and status == "已知":
-                                category["status"] = "已知"
+        # 处理API返回的JSON响应
+        result = json.loads(response)
+        
+        # 如果响应中包含categories信息，则更新关键问题状态
+        if "categories" in result:
+            for category_result in result["categories"]:
+                category_name = category_result.get("category")
+                status = category_result.get("status")
                 
-                return result["question"]
-        except json.JSONDecodeError:
-            # 如果不是JSON格式，则按照原来的方式处理
-            pass
-            
-        # 返回生成的问题
-        return response.strip()
+                # 查找对应的类别并更新状态
+                for category in key_questions:
+                    if category["category"] == category_name and status == "已知":
+                        category["status"] = "已知"
+        
+        return result["question"]
     
     def _format_key_questions(self, key_questions):
         """格式化关键问题列表，便于提供给LLM

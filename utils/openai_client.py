@@ -94,7 +94,7 @@ class OpenAIClient:
             max_tokens (int, optional): 最大生成令牌数。如果为None，则使用配置中的默认值。
         
         Returns:
-            str: 生成的文本
+            str: 生成的文本，以JSON格式返回
         """
         # 如果未指定模型，使用默认的OpenAI模型
         if not model_name:
@@ -172,6 +172,9 @@ class OpenAIClient:
         
         for attempt in range(max_retries):
             try:
+                # 导入配置参数，用于控制是否强制输出JSON格式
+                from config import FORCE_JSON_OUTPUT, RESPONSE_FORMAT
+                
                 # 创建API调用参数
                 api_params = {
                     "model": model_config.get("model", "gpt-3.5-turbo"),
@@ -182,6 +185,10 @@ class OpenAIClient:
                     "temperature": temperature,
                     "max_tokens": max_tokens
                 }
+                
+                # 如果需要强制输出JSON格式
+                if FORCE_JSON_OUTPUT:
+                    api_params["response_format"] = {"type": RESPONSE_FORMAT}
                 
                 # 如果需要强制输出JSON格式
                 if FORCE_JSON_OUTPUT:

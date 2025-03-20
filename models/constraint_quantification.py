@@ -35,45 +35,92 @@ class ConstraintQuantification:
             dict: 生成的约束条件（JSON格式）
         """
         # 加载约束条件模板
-        constraint_template = self._load_constraint_template(TEMPLATE_CONSTRAINTS_ALL_PATH)
+        constraint_template_all = self._load_constraint_template(TEMPLATE_CONSTRAINTS_ALL_PATH)
         
         # 如果没有用户需求猜测或空间理解记录，返回空约束条件
         if not user_requirement_guess or user_requirement_guess == "目前没有关于用户需求的猜测。":
-            return constraint_template
+            return constraint_template_all
         
-        # 准备提示词
-        prompt = CONSTRAINT_QUANTIFICATION_PROMPT.format(
+        # 步骤1: 生成all格式的约束条件
+        # 准备提示词，使用带注释的模板
+        with open("prompt_template_constraints_all.txt", 'r', encoding='utf-8') as f:
+            template_all_with_comments = f.read()
+        
+        prompt_all = CONSTRAINT_QUANTIFICATION_PROMPT.format(
+            base_prompt=BASE_PROMPT,
             user_requirement_guess=user_requirement_guess,
             spatial_understanding=spatial_understanding,
-            constraint_template=json.dumps(constraint_template, ensure_ascii=False, indent=2)
+            constraint_template=template_all_with_comments
         )
         
-        # 调用API生成约束条件，使用指定模型
-        response = self.openai_client.generate_completion(
-            prompt=prompt,
-            model_name=CONSTRAINT_QUANTIFICATION_MODEL,  # 使用为约束量化指定的模型
+        # 调用API生成all格式约束条件
+        response_all = self.openai_client.generate_completion(
+            prompt=prompt_all,
+            model_name=CONSTRAINT_QUANTIFICATION_MODEL,
             temperature=CONSTRAINT_QUANTIFICATION_TEMPERATURE
         )
         
         # 如果API调用失败或返回为空，则返回空约束条件
-        if not response:
-            return constraint_template
+        if not response_all:
+            return constraint_template_all
         
-        # 尝试解析响应为JSON
+        # 处理API返回的JSON响应
         try:
-            # 首先尝试直接解析为JSON
-            result = json.loads(response)
-            # 检查是否包含constraints字段
-            if "constraints" in result:
-                return result["constraints"]
+            result_all = json.loads(response_all)
+            # 处理多出的"constraints"嵌套层问题
+            if "constraints" in result_all:
+                constraints_all = result_all["constraints"]
             else:
-                # 尝试提取响应中的JSON部分（如果有）
-                json_str = self._extract_json(response)
-                constraints = json.loads(json_str)
-                return constraints
-        except json.JSONDecodeError:
-            print("警告：无法解析生成的约束条件为JSON格式。使用默认约束条件。")
-            return constraint_template
+                constraints_all = result_all
+        except (json.JSONDecodeError, TypeError):
+            # 如果解析失败，使用空模板
+            constraints_all = constraint_template_all
+        
+        # 步骤2: 将all格式转换为rooms格式
+        from utils.converter import ConstraintConverter
+        converter = ConstraintConverter()
+        constraints_rooms = converter.all_to_rooms(constraints_all)
+        
+        # 步骤3: 优化rooms格式的约束条件
+        # 准备提示词，使用带注释的模板
+        with open("prompt_template_constraints_rooms.txt", 'r', encoding='utf-8') as f:
+            template_rooms_with_comments = f.read()
+        
+        # 使用config中定义的优化rooms格式的提示词
+        prompt_rooms = CONSTRAINT_ROOMS_OPTIMIZATION_PROMPT.format(
+            user_requirement_guess=user_requirement_guess,
+            spatial_understanding=spatial_understanding,
+            constraints_rooms=json.dumps(constraints_rooms, ensure_ascii=False, indent=2),
+            template_rooms_with_comments=template_rooms_with_comments
+        )
+        
+        # 调用API优化rooms格式约束条件
+        response_rooms = self.openai_client.generate_completion(
+            prompt=prompt_rooms,
+            model_name=CONSTRAINT_QUANTIFICATION_MODEL,
+            temperature=CONSTRAINT_QUANTIFICATION_TEMPERATURE
+        )
+        
+        # 如果API调用失败或返回为空，则使用转换得到的rooms格式
+        if not response_rooms:
+            optimized_constraints_rooms = constraints_rooms
+        else:
+            # 处理API返回的JSON响应
+            try:
+                result_rooms = json.loads(response_rooms)
+                # 处理多出的"constraints"嵌套层问题
+                if "constraints" in result_rooms and "rooms" in result_rooms["constraints"]:
+                    optimized_constraints_rooms = {"rooms": result_rooms["constraints"]["rooms"]}
+                else:
+                    optimized_constraints_rooms = result_rooms.get("constraints", constraints_rooms)
+            except (json.JSONDecodeError, TypeError):
+                # 如果解析失败，使用转换得到的rooms格式
+                optimized_constraints_rooms = constraints_rooms
+        
+        # 步骤4: 将优化后的rooms格式同步回all格式
+        final_constraints_all = converter.rooms_to_all(optimized_constraints_rooms, constraints_all)
+        
+        return final_constraints_all
     
     def _load_constraint_template(self, template_path):
         """加载约束条件模板
