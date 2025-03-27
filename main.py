@@ -234,6 +234,25 @@ class ArchitectureAISystem:
             if user_input.lower() in ["退出", "结束", "quit", "exit"]:
                 print("感谢使用！再见！")
                 break
+
+            # 检查是否跳过到约束条件量化阶段
+            if user_input.lower() in ["skip", "跳过"]:
+                print("您已选择跳过提问阶段，直接进入约束条件量化阶段。")
+                constraints_json = self.finalize_constraints()
+                print("\n根据我们的对话，我已经为您生成了设计约束条件:")
+                print(json.dumps(constraints_json, ensure_ascii=False, indent=2))
+                
+                # 保存最终结果
+                self.session_manager.set_final_result({
+                    "constraints": constraints_json,
+                    "solver_status": "not_implemented"
+                })
+                
+                # 调用求解器（只保留接口）
+                print("\n正在调用求解器生成布局方案...")
+                # solver_result = self.call_solver(constraints_json)
+                
+                break
             
             # 处理用户输入并获取回应
             response = self.process_user_input(user_input)
