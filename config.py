@@ -70,8 +70,10 @@ QUESTION_GENERATION_TEMPERATURE = 0.7
 CONSTRAINT_QUANTIFICATION_TEMPERATURE = 0.5  # 约束量化需要更精确，所以温度稍低
 
 # 路径设置
-TEMPLATE_CONSTRAINTS_ALL_PATH = "template_constraints_all.txt"
-TEMPLATE_CONSTRAINTS_ROOMS_PATH = "template_constraints_rooms.txt"
+TEMPLATE_CONSTRAINTS_ALL_PATH = r"templates\template_constraints_all.txt"
+TEMPLATE_CONSTRAINTS_ROOMS_PATH = r"templates\template_constraints_rooms.txt"
+PROMPT_TEMPLATE_CONSTRAINTS_ALL_PATH = r"templates\prompt_template_constraints_all.txt"
+PROMPT_TEMPLATE_CONSTRAINTS_ROOMS_PATH = r"templates\prompt_template_constraints_rooms.txt"
 
 # 强制LLM输出JSON格式的参数设置
 FORCE_JSON_OUTPUT = True  # 是否强制LLM输出JSON格式
@@ -163,6 +165,11 @@ QUESTION_GENERATION_PROMPT = """
 4. 基于当前的用户需求猜测，避免重复已知信息。
 5. 使用友好、专业的语气，避免过于技术性的术语。
 
+任务3：提供一个简短的解释，说明你为什么选择这个问题，以及你如何判断更新各个关键问题类别的状态。这个解释应该包括：
+1. 你如何根据用户需求猜测判断各个类别的状态
+2. 为什么选择这个问题而不是其他问题
+3. 这个问题与用户当前需求的关联性
+
 生成一个开放式问题，鼓励用户分享他们的生活方式、偏好和期望，从而帮助提取更多设计需求细节。
 
 请以JSON格式返回结果，格式如下：
@@ -174,7 +181,8 @@ QUESTION_GENERATION_PROMPT = """
     }},
     // 其他类别...
   ],
-  "question": "生成的问题"
+  "question": "生成的问题",
+  "explanation": "选择这个问题和判断关键问题类别状态的思考过程"
 }}
 """
 

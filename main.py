@@ -216,9 +216,16 @@ class ArchitectureAISystem:
                 user_requirement
             )
             
-            # 输出系统回应
-            print(f"Chat2Plan: {next_question}")
-            self.session_manager.add_system_response(next_question)
+            # 如果next_question是字典（包含question和explanation），则提取问题
+            if isinstance(next_question, dict) and "question" in next_question:
+                question_text = next_question["question"]
+                # 输出系统回应
+                print(f"Chat2Plan: {question_text}")
+                self.session_manager.add_system_response(next_question)
+            else:
+                # 向后兼容，处理next_question是字符串的情况
+                print(f"Chat2Plan: {next_question}")
+                self.session_manager.add_system_response(next_question)
         else:
             print("未找到有效的初始输入文件，请描述您的建筑边界和环境信息。")
         
@@ -257,8 +264,14 @@ class ArchitectureAISystem:
             # 处理用户输入并获取回应
             response = self.process_user_input(user_input)
             
-            # 输出系统回应
-            print(f"Chat2Plan: {response}")
+            # 如果response是字典（包含question和explanation），则提取问题
+            if isinstance(response, dict) and "question" in response:
+                question_text = response["question"]
+                # 输出系统回应
+                print(f"Chat2Plan: {question_text}")
+            else:
+                # 向后兼容，处理response是字符串的情况
+                print(f"Chat2Plan: {response}")
             
             # 记录系统回应
             self.session_manager.add_system_response(response)

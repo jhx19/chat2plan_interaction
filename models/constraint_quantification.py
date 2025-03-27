@@ -8,7 +8,7 @@ import json
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import CONSTRAINT_QUANTIFICATION_PROMPT, CONSTRAINT_QUANTIFICATION_TEMPERATURE, CONSTRAINT_ROOMS_OPTIMIZATION_PROMPT
-from config import BASE_PROMPT, TEMPLATE_CONSTRAINTS_ALL_PATH, TEMPLATE_CONSTRAINTS_ROOMS_PATH
+from config import BASE_PROMPT, TEMPLATE_CONSTRAINTS_ALL_PATH, TEMPLATE_CONSTRAINTS_ROOMS_PATH, PROMPT_TEMPLATE_CONSTRAINTS_ALL_PATH, PROMPT_TEMPLATE_CONSTRAINTS_ROOMS_PATH
 from config import CONSTRAINT_QUANTIFICATION_MODEL
 
 class ConstraintQuantification:
@@ -43,7 +43,7 @@ class ConstraintQuantification:
         
         # 步骤1: 生成all格式的约束条件
         # 准备提示词，使用带注释的模板
-        with open("prompt_template_constraints_all.txt", 'r', encoding='utf-8') as f:
+        with open(PROMPT_TEMPLATE_CONSTRAINTS_ALL_PATH, 'r', encoding='utf-8') as f:
             template_all_with_comments = f.read()
         
         prompt_all = CONSTRAINT_QUANTIFICATION_PROMPT.format(
@@ -83,7 +83,7 @@ class ConstraintQuantification:
         
         # 步骤3: 优化rooms格式的约束条件
         # 准备提示词，使用带注释的模板
-        with open("prompt_template_constraints_rooms.txt", 'r', encoding='utf-8') as f:
+        with open(PROMPT_TEMPLATE_CONSTRAINTS_ROOMS_PATH, 'r', encoding='utf-8') as f:
             template_rooms_with_comments = f.read()
         
         # 使用config中定义的优化rooms格式的提示词

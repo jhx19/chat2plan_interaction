@@ -72,7 +72,14 @@ class QuestionGeneration:
                     if category["category"] == category_name and status == "已知":
                         category["status"] = "已知"
         
-        return result["question"]
+        # 获取explanation字段（如果存在）
+        explanation = result.get("explanation", "")
+        
+        # 返回包含问题和解释的字典
+        return {
+            "question": result["question"],
+            "explanation": explanation
+        }
     
     def _format_key_questions(self, key_questions):
         """格式化关键问题列表，便于提供给LLM
