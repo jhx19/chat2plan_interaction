@@ -172,9 +172,6 @@ class OpenAIClient:
         
         for attempt in range(max_retries):
             try:
-                # 导入配置参数，用于控制是否强制输出JSON格式
-                from config import FORCE_JSON_OUTPUT, RESPONSE_FORMAT
-                
                 # 创建API调用参数
                 api_params = {
                     "model": model_config.get("model", "gpt-3.5-turbo"),
@@ -183,19 +180,60 @@ class OpenAIClient:
                         {"role": "user", "content": prompt}
                     ],
                     "temperature": temperature,
-                    "max_tokens": max_tokens
+                    "max_tokens": max_tokens,
+                    "stream": True  # 启用流式输出
                 }
                 
                 # 如果需要强制输出JSON格式
-                if FORCE_JSON_OUTPUT:
-                    api_params["response_format"] = {"type": RESPONSE_FORMAT}
+                # if FORCE_JSON_OUTPUT:
+                #     api_params["response_format"] = {"type": RESPONSE_FORMAT}
+                #     # 注意：启用流式输出时，JSON格式可能需要特殊处理
+                #     api_params["stream"] = False  # JSON格式时禁用流式输出
                 
-                # 如果需要强制输出JSON格式
-                if FORCE_JSON_OUTPUT:
-                    api_params["response_format"] = {"type": RESPONSE_FORMAT}
+                # 根据是否启用流式输出选择不同的处理方式
+                if api_params.get("stream", False):
+                    # 流式输出处理
+                    full_content = ""
+                    print("\n系统: ", end="", flush=True)  # 开始输出标记
+                    
+                    # 创建流式响应
+                    stream_resp = client.chat.completions.create(**api_params)
+                    
+                    # 逐块处理并输出响应
+                    for chunk in stream_resp:
+                        if chunk.choices and len(chunk.choices) > 0:
+                            delta = chunk.choices[0].delta
+                            if hasattr(delta, 'content') and delta.content:
+                                content_chunk = delta.content
+                                print(content_chunk, end="", flush=True)  # 实时输出到终端
+                                full_content += content_chunk
+                    
+                    print()  # 输出完成后换行
+                    content = full_content
+                else:
+                    # 非流式输出处理
+                    response = client.chat.completions.create(**api_params)
+                    content = response.choices[0].message.content
                 
-                response = client.chat.completions.create(**api_params)
-                content = response.choices[0].message.content
+                # 计算token使用量（流式输出时可能需要额外处理）
+                if not api_params.get("stream", False):
+                    tokens_used = {
+                        "prompt": response.usage.prompt_tokens,
+                        "completion": response.usage.completion_tokens,
+                        "total": response.usage.total_tokens
+                    }
+                else:
+                    # 流式输出时无法直接获取token使用量，使用估算值
+                    # 这里使用简单估算，实际项目中可能需要更精确的计算方法
+                    tokens_used = {
+                        "prompt": len(prompt) // 4,  # 粗略估算
+                        "completion": len(content) // 4,  # 粗略估算
+                        "total": (len(prompt) + len(content)) // 4  # 粗略估算
+                    }
+                
+                # 记录API调用信息
+                model_name = model_config.get("model", "gpt-3.5-turbo")
+                self._record_api_call(model_name, prompt, content, tokens_used)
                 
                 # 清理响应中可能存在的Markdown代码块标记
                 if content.startswith('```'):

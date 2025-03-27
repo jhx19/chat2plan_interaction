@@ -9,6 +9,7 @@ from utils.openai_client import OpenAIClient
 from utils.json_handler import JsonHandler
 from utils.converter import ConstraintConverter
 from utils.session_manager import SessionManager
+from models.unified_processor import UnifiedProcessor
 
 # 加载环境变量（包括OpenAI API密钥）
 load_dotenv()
@@ -24,12 +25,18 @@ class ArchitectureAISystem:
         # 初始化OpenAI客户端
         self.openai_client = OpenAIClient()
         
+        # 设置会话记录管理器到OpenAI客户端
+        self.openai_client.set_session_manager(self.session_manager)
+        
         # 初始化各功能模块
         self.spatial_understanding = SpatialUnderstanding(self.openai_client)
         self.requirement_analysis = RequirementAnalysis(self.openai_client)
         self.question_generation = QuestionGeneration(self.openai_client)
         self.constraint_quantification = ConstraintQuantification(self.openai_client)
         
+        # 初始化统一处理模块
+        self.unified_processor = UnifiedProcessor(self.openai_client)
+
         # 初始化JSON处理工具和转换工具
         self.json_handler = JsonHandler()
         self.converter = ConstraintConverter()
@@ -61,58 +68,33 @@ class ArchitectureAISystem:
         self.key_questions = [
             {
                 "category": "房间数量和类型",
-                "status": "未知"
-                # "questions": [
-                #     {"question": "您需要哪些类型的房间？", "status": "未知"}
-                # ]
+                "status": "未知",
+                "details": ""
             },
             {
-                "category": "住户信息",                
-                "status": "未知"
-                # "questions": [
-                #     {"question": "这个住宅将容纳多少人？家庭成员构成如何？", "status": "未知"},
-                #     {"question": "您对未来的家庭规划有什么考虑？", "status": "未知"}
-                # ]
+                "category": "住户信息",
+                "status": "未知",
+                "details": ""
             },
             {
                 "category": "生活方式",
-                "status": "未知"
-                # "questions": [
-                # #     {"question": "您更偏好社交空间还是私人空间？", "status": "未知"},
-                # #     {"question": "您在家中会做饭吗？频率如何？", "status": "未知"},
-                # #     {"question": "您是否需要在家工作的空间？", "status": "未知"}
-                # # ]
+                "status": "未知",
+                "details": ""
             },
             {
                 "category": "空间使用偏好",
-                "status": "未知"
-                # "questions": [
-                #     {"question": "您喜欢明亮开放的空间还是独立封闭的空间？", "status": "未知"},
-                #     {"question": "您对采光有什么特别的要求？", "status": "未知"}
-                # ]
-            },
-            {
-                "category": "功能需求",
-                "status": "未知"
-                # "questions": [
-                #     {"question": "您需要专门的储物空间吗？", "status": "未知"},
-                #     {"question": "您有特殊的爱好需要专门空间吗？", "status": "未知"}
-                # ]
+                "status": "未知",
+                "details": ""
             },
             {
                 "category": "环境应对要求",
-                "status": "未知"
-                # "questions": [
-                #     {"question": "您对噪音敏感吗？需要特别的隔音设计吗？", "status": "未知"},
-                #     {"question": "您希望拥有室外空间（如阳台）吗？", "status": "未知"}
-                # ]
+                "status": "未知",
+                "details": ""
             },
             {
                 "category": "其他特殊需求",
-                "status": "未知"
-                # "questions": [
-                #     {"question": "您还有其他特殊的设计需求吗？", "status": "未知"}
-                # ]
+                "status": "未知",
+                "details": ""
             }
         ]
     
@@ -155,6 +137,50 @@ class ArchitectureAISystem:
             print(f"加载初始输入文件失败: {e}")
             return None
     
+    def process_llm_result(self, result, user_input=None):
+        """处理LLM返回的结果，更新系统状态
+        
+        Args:
+            result (dict): LLM返回的结果
+            user_input (str, optional): 用户输入，用于记录日志
+            
+        Returns:
+            dict: 包含处理后的next_question和更新状态
+        """
+        # 更新用户需求猜测
+        if result["user_requirements"]["updated"]:
+            self.user_requirement_guess = result["user_requirements"]["content"]
+            if user_input:
+                self.session_manager.update_user_requirements(
+                    {"content": self.user_requirement_guess},
+                    user_input
+                )
+            print("用户需求已更新。")
+        
+        # 更新空间理解记录
+        if result["spatial_understanding"]["updated"]:
+            self.spatial_understanding_record = result["spatial_understanding"]["content"]
+            if user_input:
+                self.session_manager.update_spatial_understanding(
+                    {"content": self.spatial_understanding_record},
+                    user_input
+                )
+            print("空间理解已更新。")
+        
+        # 更新关键问题列表
+        if result["key_questions"]["updated"]:
+            self.key_questions = result["key_questions"]["content"]
+            if user_input:
+                self.session_manager.update_key_questions(
+                    {"questions": self.key_questions},
+                    user_input
+                )
+        
+        # 获取下一个问题
+        next_question = result.get("next_question", "能否再详细描述一下您对这个建筑设计的期望和需求？")
+        
+        return next_question
+    
     def start_interaction(self):
         """开始交互流程"""
         print("欢迎使用建筑布局设计AI系统！")
@@ -166,76 +192,24 @@ class ArchitectureAISystem:
         if input_data and "spatial_info" in input_data and "user_requirement" in input_data:
             print("已从input.json加载初始输入数据。")
             
-            # 处理空间信息
-            spatial_info = input_data["spatial_info"]
-            self.session_manager.add_user_input(spatial_info)
-            spatial_understanding_result = self.spatial_understanding.process(
-                spatial_info, self.spatial_understanding_record
-            )
-            if spatial_understanding_result["updated"]:
-                self.spatial_understanding_record = spatial_understanding_result["content"]
-                self.session_manager.update_spatial_understanding(
-                    {"content": self.spatial_understanding_record},
-                    spatial_info
-                )
-                print("初始空间理解已更新。")
-            
-            # 处理用户需求
-            user_requirement = input_data["user_requirement"]
-            self.session_manager.add_user_input(user_requirement)
-            analysis_result = self.requirement_analysis.process(
-                user_requirement, self.user_requirement_guess, self.spatial_understanding_record
-            )
-            
-            # 更新用户需求猜测
-            if analysis_result["requirement"]["updated"]:
-                self.user_requirement_guess = analysis_result["requirement"]["content"]
-                self.session_manager.update_user_requirements(
-                    {"content": self.user_requirement_guess},
-                    user_requirement
-                )
-                print("初始用户需求已更新。")
-            
-            # 更新空间理解记录（如果在处理需求时有更新）
-            if analysis_result["spatial_understanding"]["updated"]:
-                self.spatial_understanding_record = analysis_result["spatial_understanding"]["content"]
-                self.session_manager.update_spatial_understanding(
-                    {"content": self.spatial_understanding_record},
-                    user_requirement
-                )
-                print("空间理解已更新。")
-            
-            # 生成第一个问题
-            next_question = self.question_generation.generate_question(
-                self.user_requirement_guess, self.key_questions
-            )
-            
-            # 记录关键问题状态
-            self.session_manager.update_key_questions(
-                {"questions": self.key_questions},
-                user_requirement
-            )
-            
-            # 如果next_question是字典（包含question和explanation），则提取问题
-            if isinstance(next_question, dict) and "question" in next_question:
-                question_text = next_question["question"]
-                # 输出系统回应
-                print(f"Chat2Plan: {question_text}")
-                self.session_manager.add_system_response(next_question)
-            else:
-                # 向后兼容，处理next_question是字符串的情况
-                print(f"Chat2Plan: {next_question}")
-                self.session_manager.add_system_response(next_question)
-        else:
-            print("未找到有效的初始输入文件，请描述您的建筑边界和环境信息。")
-        
-        # 主交互循环
-        while True:
-            # 获取用户输入
-            user_input = input("用户: ")
+            # 合并空间信息和用户需求作为首次输入
+            user_input = f"空间信息：{input_data['spatial_info']}\n\n用户需求：{input_data['user_requirement']}"
             
             # 记录用户输入
             self.session_manager.add_user_input(user_input)
+            
+            # 获取当前对话历史
+            conversation_history = self.session_manager.get_conversation_history()
+        
+        # 主交互循环
+        while True:
+            
+            if not user_input:
+                # 获取用户输入
+                user_input = input("用户: ")
+            
+                # 记录用户输入
+                self.session_manager.add_user_input(user_input)
             
             # 检查是否退出
             if user_input.lower() in ["退出", "结束", "quit", "exit"]:
@@ -263,7 +237,7 @@ class ArchitectureAISystem:
             
             # 处理用户输入并获取回应
             response = self.process_user_input(user_input)
-            
+            user_input = ""
             # 如果response是字典（包含question和explanation），则提取问题
             if isinstance(response, dict) and "question" in response:
                 question_text = response["question"]
@@ -298,41 +272,20 @@ class ArchitectureAISystem:
     def process_user_input(self, user_input):
         """处理用户输入，调用相应模块，返回系统回应"""
         
-        # 需求分析：根据用户输入和已有信息，推测用户需求和更新空间理解
-        analysis_result = self.requirement_analysis.process(
-            user_input, self.user_requirement_guess, self.spatial_understanding_record
+        # 获取当前对话历史
+        conversation_history = self.session_manager.get_conversation_history()
+        
+        # 使用统一处理模块处理用户输入
+        unified_result = self.unified_processor.process(
+            user_input,
+            self.spatial_understanding_record,
+            self.user_requirement_guess,
+            self.key_questions,
+            conversation_history
         )
         
-        # 更新用户需求猜测
-        if analysis_result["requirement"]["updated"]:
-            self.user_requirement_guess = analysis_result["requirement"]["content"]
-            # 记录需求分析状态
-            self.session_manager.update_user_requirements(
-                {"content": self.user_requirement_guess},
-                user_input
-            )
-            print("初始用户需求已更新。")
-        
-        # 更新空间理解记录（如果在交互循环中有更新）
-        if analysis_result["spatial_understanding"]["updated"]:
-            self.spatial_understanding_record = analysis_result["spatial_understanding"]["content"]
-            # 记录空间理解状态
-            self.session_manager.update_spatial_understanding(
-                {"content": self.spatial_understanding_record},
-                user_input
-            )
-            print("空间理解已更新。")
-        
-        # 提问：生成下一个问题（同时更新关键问题状态）
-        next_question = self.question_generation.generate_question(
-            self.user_requirement_guess, self.key_questions
-        )
-        
-        # 记录关键问题状态（已在generate_question中更新）
-        self.session_manager.update_key_questions(
-            {"questions": self.key_questions},
-            user_input
-        )
+        # 使用统一的后处理函数处理LLM返回的结果
+        next_question = self.process_llm_result(unified_result, user_input)
         
         return next_question
     
@@ -345,9 +298,10 @@ class ArchitectureAISystem:
         pass
     
     def all_key_questions_resolved(self):
-        """检查是否所有关键问题都已解决"""
-        for category in self.key_questions:
-            if category["status"] == "未知":
+        """检查是否所有关键问题都已解决""" 
+        # self.key_questions 是一个列表st，每个元素是一个dict，包含category, status, details
+        for question in self.key_questions:
+            if question["status"] == "未知":
                 return False
         return True
     
