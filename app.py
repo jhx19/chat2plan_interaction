@@ -5,6 +5,8 @@ import uuid
 import threading
 import queue
 import sys
+import time
+import traceback
 from main import ArchitectureAISystem
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
@@ -72,6 +74,43 @@ def start_session():
         return jsonify({'error': 'Session initialization timed out'}), 500
     
     return jsonify({'session_id': session_id})
+
+@app.route('/api/check_visualization_files', methods=['GET'])
+def check_visualization_files():
+    session_id = request.args.get('session_id')
+    
+    if not session_id or session_id not in sessions:
+        return jsonify({'error': '无效的会话ID'}), 400
+    
+    system = sessions[session_id]
+    session_dir = system.session_manager.get_session_dir()
+    
+    print(f"检查可视化文件夹: {session_dir}")
+    
+    files = {}
+    
+    # 检查特定文件是否存在
+    room_graph_file = os.path.join(session_dir, "constraints_visualization.png")
+    if os.path.exists(room_graph_file):
+        files['room_graph'] = f'/sessions/{os.path.basename(session_dir)}/constraints_visualization.png'
+        print(f"找到房间图: {room_graph_file}")
+    
+    table_file = os.path.join(session_dir, "constraints_visualization_table.png")
+    if os.path.exists(table_file):
+        files['constraints_table'] = f'/sessions/{os.path.basename(session_dir)}/constraints_visualization_table.png'
+        print(f"找到约束表格: {table_file}")
+    
+    # 检查是否有布局方案相关文件（模式匹配）
+    layout_files = []
+    for f in os.listdir(session_dir):
+        if (f.startswith('solution') or 'layout' in f.lower()) and f.endswith('.png'):
+            layout_files.append(f)
+    
+    if layout_files:
+        files['layout'] = f'/sessions/{os.path.basename(session_dir)}/{layout_files[0]}'
+        print(f"找到布局方案: {layout_files[0]}")
+    
+    return jsonify({'files': files if files else None})
 
 @app.route('/api/list_sessions', methods=['GET'])
 def list_sessions():
@@ -308,27 +347,39 @@ def chat():
                     print("Starting constraint generation process...")
                     
                     # Generate constraints
-                    system.finalize_constraints()
-                    
-                    print("Constraint generation complete! Moving to visualization stage...")
-                    
-                    # Move to visualization stage
-                    system.workflow_manager.advance_to_next_stage()
-                    
-                    # Visualization will happen automatically in the next stage
-                    print("Generating constraint visualizations...")
-                    
-                    # We need to explicitly call visualization here since the main loop won't do it
-                    output_dir = os.path.join(system.session_manager.get_session_dir(), "constraints_visualization.png")
-                    system.constraint_visualization.visualize_constraints(
-                        system.constraints_all,
-                        output_path=output_dir
-                    )
-                    
-                    print("Visualization complete! Ready for refinement stage.")
-                    
-                    # Advance to refinement stage
-                    system.workflow_manager.advance_to_next_stage()
+                    try:
+                        # Generate constraints
+                        system.finalize_constraints()
+                        
+                        print("Constraint generation complete! Moving to visualization stage...")
+                        
+                        # Move to visualization stage
+                        system.workflow_manager.advance_to_next_stage()
+                        
+                        # Visualization will happen automatically in the next stage
+                        print("Generating constraint visualizations...")
+                        
+                        try:
+                            # We need to explicitly call visualization here since the main loop won't do it
+                            output_dir = os.path.join(system.session_manager.get_session_dir(), "constraints_visualization.png")
+                            viz_result = system.constraint_visualization.visualize_constraints(
+                                system.constraints_all,
+                                output_path=output_dir
+                            )
+                            
+                            print(f"Visualization complete! Files created at: {output_dir}")
+                            
+                            # Advance to refinement stage after a delay to allow frontend to update
+                            time.sleep(2)
+                            system.workflow_manager.advance_to_next_stage()
+                            print("Advanced to refinement stage!")
+                        except Exception as viz_error:
+                            print(f"Error during visualization: {str(viz_error)}")
+                            traceback.print_exc()
+                            
+                    except Exception as e:
+                        print(f"Error in constraint generation: {str(e)}")
+                        traceback.print_exc()
                 
                 threading.Thread(target=generate_constraints, daemon=True).start()
             
@@ -413,15 +464,21 @@ def get_visualization():
     system = sessions[session_id]
     session_dir = system.session_manager.get_session_dir()
     
-    # Return paths to visualization images
+    print(f"查找可视化图片文件夹: {session_dir}")
+    
+    # 返回可视化图片路径
     visualizations = []
     if os.path.exists(session_dir):
         for filename in os.listdir(session_dir):
             if filename.endswith('.png'):
-                visualizations.append(f'/sessions/{os.path.basename(session_dir)}/{filename}')
+                full_path = os.path.join(session_dir, filename)
+                print(f"找到图片文件: {full_path}")
+                url_path = f'/sessions/{os.path.basename(session_dir)}/{filename}'
+                visualizations.append(url_path)
+    
+    print(f"找到 {len(visualizations)} 个可视化图片")
     
     return jsonify({'visualizations': visualizations})
-
 @app.route('/sessions/<path:path>')
 def serve_session_file(path):
     sessions_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sessions')
@@ -437,28 +494,66 @@ def skip_stage():
     system = sessions[session_id]
     current_stage = system.workflow_manager.get_current_stage()
     
+    print(f"Skipping stage: {current_stage}")
+    
     # Advance to the next stage
     system.workflow_manager.advance_to_next_stage()
     new_stage = system.workflow_manager.get_current_stage()
+    
+    print(f"Advanced to stage: {new_stage}")
     
     # Handle special actions for certain stages
     if new_stage == system.workflow_manager.STAGE_CONSTRAINT_GENERATION:
         # Launch constraint generation in a background thread
         def generate_constraints():
-            system.finalize_constraints()
-            system.workflow_manager.advance_to_next_stage()
+            print("Skip triggered constraint generation...")
+            try:
+                system.finalize_constraints()
+                print("Constraint generation complete!")
+                system.workflow_manager.advance_to_next_stage()
+                
+                viz_stage = system.workflow_manager.get_current_stage()
+                print(f"Now in stage: {viz_stage}")
+                
+                # Generate visualization
+                print("Generating visualization...")
+                output_dir = os.path.join(system.session_manager.get_session_dir(), "constraints_visualization.png")
+                system.constraint_visualization.visualize_constraints(
+                    system.constraints_all,
+                    output_path=output_dir
+                )
+                print(f"Visualization complete! Files created at: {output_dir}")
+                
+                # Wait briefly to allow frontend to update
+                time.sleep(2)
+                
+                # Advance to refinement stage
+                system.workflow_manager.advance_to_next_stage()
+                refinement_stage = system.workflow_manager.get_current_stage()
+                print(f"Advanced to stage: {refinement_stage}")
+            except Exception as e:
+                print(f"Error in constraint generation after skip: {str(e)}")
+                traceback.print_exc()
         
         threading.Thread(target=generate_constraints, daemon=True).start()
     
     elif new_stage == system.workflow_manager.STAGE_SOLUTION_GENERATION:
         # Launch solution generation in a background thread
         def generate_solution():
-            system.current_solution = system.call_solver(system.constraints_all)
-            system.session_manager.add_intermediate_state(
-                f"solution_generation_{system.workflow_manager.current_iteration}",
-                {"solution": system.current_solution}
-            )
-            system.workflow_manager.advance_to_next_stage()
+            try:
+                print("Skip triggered solution generation...")
+                system.current_solution = system.call_solver(system.constraints_all)
+                system.session_manager.add_intermediate_state(
+                    f"solution_generation_{system.workflow_manager.current_iteration}",
+                    {"solution": system.current_solution}
+                )
+                print("Solution generation complete!")
+                system.workflow_manager.advance_to_next_stage()
+                refinement_stage = system.workflow_manager.get_current_stage()
+                print(f"Advanced to solution refinement stage: {refinement_stage}")
+            except Exception as e:
+                print(f"Error in solution generation after skip: {str(e)}")
+                traceback.print_exc()
         
         threading.Thread(target=generate_solution, daemon=True).start()
     
@@ -467,6 +562,5 @@ def skip_stage():
         'current_stage': new_stage,
         'stage_description': system.workflow_manager.get_stage_description()
     })
-
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
