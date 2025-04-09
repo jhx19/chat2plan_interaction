@@ -77,6 +77,7 @@ class ArchitectureAISystem:
         if resume_session_path and os.path.isdir(resume_session_path):
             # 从指定路径恢复会话状态
             self.resume_from_session(resume_session_path)
+
         else:
             # 初始化空间理解（空）
             self.spatial_understanding_record = ""
@@ -408,6 +409,8 @@ class ArchitectureAISystem:
                         if self.workflow_manager.can_advance_to_constraint_generation():
                             print("所有关键问题已解决，即将进入约束条件生成阶段...")
                             self.workflow_manager.advance_to_next_stage()
+                            user_input = None
+                            continue
                     # 输出系统回应
                     print(f"系统: {question_text}")
                 else:
@@ -421,6 +424,8 @@ class ArchitectureAISystem:
                 if self.workflow_manager.can_advance_to_constraint_generation():
                     print("所有关键问题已解决，即将进入约束条件生成阶段...")
                     self.workflow_manager.advance_to_next_stage()
+                    user_input = None
+                    continue
             
             elif current_stage == self.workflow_manager.STAGE_CONSTRAINT_GENERATION:
                 # 约束条件生成阶段
