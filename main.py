@@ -714,7 +714,41 @@ class ArchitectureAISystem:
             "message": "布局方案生成成功",
             "layout": layout
         }
-
+    
+    def finalize_constraints(self):
+            """生成最终的约束条件"""
+            # 使用约束条件量化模块将用户需求猜测转化为约束条件
+            constraints_all = self.constraint_quantification.generate_constraints(
+                self.user_requirement_guess, self.spatial_understanding_record
+            )
+            
+            # 检查并添加path和entrance
+            from utils.constraint_validator import ConstraintValidator
+            validator = ConstraintValidator()
+            
+            # 确保约束中包含path和entrance
+            constraints_all, path_modified = validator.validate_and_add_path_entrance(constraints_all)
+            
+            # 检查所有房间的可达性，添加必要的path连接
+            constraints_all, reachability_modified = validator.validate_connectivity(constraints_all)
+            
+            if path_modified or reachability_modified:
+                print("已添加流线空间(path)和入口(entrance)，并确保所有房间可达性。")
+            
+            # 转换为rooms格式
+            constraints_rooms = self.converter.all_to_rooms(constraints_all)
+            
+            # 保存约束条件
+            self.constraints_all = constraints_all
+            self.constraints_rooms = constraints_rooms
+            
+            # 记录约束条件状态
+            self.session_manager.update_constraints(
+                {"all": constraints_all, "rooms": constraints_rooms}
+            )
+            
+            return constraints_all
+    
 def parse_args():
     """解析命令行参数"""
     parser = argparse.ArgumentParser(description='建筑布局设计AI系统')

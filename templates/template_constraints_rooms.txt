@@ -2,11 +2,16 @@
   "rooms": {
     "living_room": {
       "connection": [],
+      "adjacency": [],
       "area": {},
       "orientation": "",
       "window_access": false,
       "aspect_ratio": {},
       "repulsion": []
     }
+  },
+  "special_spaces": {
+    "path": true,
+    "entrance": true
   }
-} 
+}

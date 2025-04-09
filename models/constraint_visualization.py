@@ -77,11 +77,31 @@ class ConstraintVisualization:
         for room in rooms:
             G.add_node(room)
         
+        # 添加特殊节点：path和entrance（如果存在）
+        special_spaces = constraints.get("special_spaces", {})
+        if special_spaces.get("path", False):
+            G.add_node("path")
+        if special_spaces.get("entrance", False):
+            G.add_node("entrance")
+        
+        # 存储连接和邻接关系，用于后续绘图
+        connection_edges = []
+        adjacency_edges = []
+        
         # 为连接的房间添加边
         for connection in constraints["soft_constraints"]["connection"]["constraints"]:
             if "room pair" in connection:
                 room_pair = connection["room pair"]
                 G.add_edge(room_pair[0], room_pair[1])
+                connection_edges.append((room_pair[0], room_pair[1]))
+        
+        # 为邻接的房间添加边（不同样式）
+        for adjacency in constraints["soft_constraints"].get("adjacency", {}).get("constraints", []):
+            if "room pair" in adjacency:
+                room_pair = adjacency["room pair"]
+                if not G.has_edge(room_pair[0], room_pair[1]):  # 避免重复边
+                    G.add_edge(room_pair[0], room_pair[1])
+                    adjacency_edges.append((room_pair[0], room_pair[1]))
         
         # 为每个房间计算面积和长宽比
         room_areas = {}
@@ -138,6 +158,7 @@ class ConstraintVisualization:
                     max_ratio = ratio_constraint.get("max", "")
                     aspect_ratio = f"{min_ratio}-{max_ratio}" if min_ratio and max_ratio else "未指定"
             
+            # 获取直接连接的房间
             connections = []
             for connection in constraints["soft_constraints"]["connection"]["constraints"]:
                 if "room pair" in connection:
@@ -146,6 +167,16 @@ class ConstraintVisualization:
                         other_room = room_pair[0] if room_pair[1] == room else room_pair[1]
                         connections.append(other_room)
             
+            # 获取邻接的房间
+            adjacencies = []
+            for adjacency in constraints["soft_constraints"].get("adjacency", {}).get("constraints", []):
+                if "room pair" in adjacency:
+                    room_pair = adjacency["room pair"]
+                    if room in room_pair:
+                        other_room = room_pair[0] if room_pair[1] == room else room_pair[1]
+                        adjacencies.append(other_room)
+            
+            # 获取排斥的房间
             repulsions = []
             for repulsion in constraints["soft_constraints"]["repulsion"]["constraints"]:
                 if repulsion.get("room1") == room:
@@ -160,7 +191,8 @@ class ConstraintVisualization:
                 "朝向": orientation,
                 "窗户": window_access,
                 "长宽比": aspect_ratio,
-                "连接": ", ".join(connections) if connections else "无",
+                "直接连接": ", ".join(connections) if connections else "无",
+                "空间邻接": ", ".join(adjacencies) if adjacencies else "无",
                 "排斥": ", ".join(repulsions) if repulsions else "无"
             })
         
@@ -172,19 +204,56 @@ class ConstraintVisualization:
             # 设置节点位置，使用spring_layout算法
             pos = nx.spring_layout(G, seed=42)
             
-            # 绘制边（连接关系）
-            nx.draw_networkx_edges(G, pos, width=1.5, alpha=0.7, edge_color='gray')
+            # 绘制连接关系边（实线）
+            nx.draw_networkx_edges(
+                G, pos, 
+                edgelist=connection_edges,
+                width=1.5, 
+                alpha=0.7, 
+                edge_color='gray'
+            )
+            
+            # 绘制邻接关系边（虚线）
+            nx.draw_networkx_edges(
+                G, pos, 
+                edgelist=adjacency_edges,
+                width=1.2, 
+                alpha=0.7, 
+                edge_color='blue',
+                style='dashed'
+            )
             
             # 为每个房间分配一个颜色
             room_colors = {}
             for i, room in enumerate(rooms):
                 room_colors[room] = self.colors[i % len(self.colors)]
             
+            # 为特殊节点设置颜色
+            if "path" in G.nodes():
+                room_colors["path"] = "red"
+            if "entrance" in G.nodes():
+                room_colors["entrance"] = "green"
+            
             # 绘制椭圆形状的节点，大小基于面积，形状基于长宽比，颜色为唯一的房间颜色
             ax = plt.gca()
             for node, (x, y) in pos.items():
-                area = room_areas[node]
-                aspect_ratio = room_aspect_ratios[node]
+                # 特殊处理path和entrance
+                if node == "path":
+                    # Path使用较大的圆形
+                    circle = plt.Circle((x, y), 0.1, fill=True, alpha=0.7,
+                                       color=room_colors[node], edgecolor='black', linewidth=1.5)
+                    ax.add_patch(circle)
+                    continue
+                elif node == "entrance":
+                    # Entrance使用菱形
+                    diamond = plt.Rectangle((x-0.07, y-0.07), 0.14, 0.14, angle=45, fill=True, alpha=0.7,
+                                           color=room_colors[node], edgecolor='black', linewidth=1.5)
+                    ax.add_patch(diamond)
+                    continue
+                
+                # 普通房间节点
+                area = room_areas.get(node, 15)  # 默认面积为15
+                aspect_ratio = room_aspect_ratios.get(node, 1.0)  # 默认长宽比为1.0
                 
                 # 计算椭圆的宽度和高度
                 width = np.sqrt(area * aspect_ratio) * 0.05
@@ -205,7 +274,8 @@ class ConstraintVisualization:
             
             # 添加图例说明
             legend_elements = [
-                plt.Line2D([0], [0], color='gray', lw=1.5, label='房间连接关系')
+                plt.Line2D([0], [0], color='gray', lw=1.5, label='直接连接'),
+                plt.Line2D([0], [0], color='blue', lw=1.2, linestyle='dashed', label='空间邻接')
             ]
             
             # 为每个房间添加一个图例项
@@ -215,6 +285,18 @@ class ConstraintVisualization:
                               markerfacecolor=room_colors[room], markersize=10)
                 )
                 
+            # 为特殊空间添加图例（如果存在）
+            if "path" in G.nodes():
+                legend_elements.append(
+                    plt.Line2D([0], [0], marker='o', color='w', label='流线空间(path)',
+                              markerfacecolor='red', markersize=10)
+                )
+            if "entrance" in G.nodes():
+                legend_elements.append(
+                    plt.Line2D([0], [0], marker='o', color='w', label='入口(entrance)',
+                              markerfacecolor='green', markersize=10)
+                )
+            
             plt.legend(handles=legend_elements, loc='best', fontsize=10)
             
             # 保存图形
@@ -340,7 +422,7 @@ class ConstraintVisualization:
         # 从约束条件中提取房间列表
         rooms = constraints["hard_constraints"]["room_list"]
         
-        # 计算连接关系
+        # 计算直接连接关系
         connections = {}
         for room in rooms:
             connections[room] = []
@@ -348,15 +430,51 @@ class ConstraintVisualization:
         for connection in constraints["soft_constraints"]["connection"]["constraints"]:
             if "room pair" in connection:
                 room_pair = connection["room pair"]
-                connections[room_pair[0]].append(room_pair[1])
-                connections[room_pair[1]].append(room_pair[0])
+                # 排除特殊空间path和entrance
+                if room_pair[0] in rooms and room_pair[1] in rooms:
+                    connections[room_pair[0]].append(room_pair[1])
+                    connections[room_pair[1]].append(room_pair[0])
+        
+        # 计算邻接关系
+        adjacencies = {}
+        for room in rooms:
+            adjacencies[room] = []
+        
+        for adjacency in constraints["soft_constraints"].get("adjacency", {}).get("constraints", []):
+            if "room pair" in adjacency:
+                room_pair = adjacency["room pair"]
+                # 排除特殊空间path和entrance
+                if room_pair[0] in rooms and room_pair[1] in rooms:
+                    adjacencies[room_pair[0]].append(room_pair[1])
+                    adjacencies[room_pair[1]].append(room_pair[0])
+        
+        # 检查流线和入口是否存在
+        special_spaces = constraints.get("special_spaces", {})
+        has_path = special_spaces.get("path", False)
+        has_entrance = special_spaces.get("entrance", False)
+        
+        # 查找与path相连的房间
+        path_connections = []
+        if has_path:
+            for connection in constraints["soft_constraints"]["connection"]["constraints"]:
+                if "room pair" in connection:
+                    room_pair = connection["room pair"]
+                    if "path" in room_pair:
+                        other_room = room_pair[0] if room_pair[1] == "path" else room_pair[1]
+                        if other_room in rooms:  # 只添加正式房间，不包括entrance
+                            path_connections.append(other_room)
         
         # 生成描述文本
         description = "约束条件概述：\n\n"
-        description += f"总共包含 {len(rooms)} 个房间：{', '.join(rooms)}\n\n"
+        description += f"总共包含 {len(rooms)} 个房间：{', '.join(rooms)}\n"
+        
+        if has_path and has_entrance:
+            description += "\n使用流线空间(path)连接入口(entrance)和其他房间"
+            if path_connections:
+                description += f"\n流线直接连接的房间: {', '.join(path_connections)}\n"
         
         # 描述每个房间的主要约束
-        description += "各房间的主要约束：\n"
+        description += "\n各房间的主要约束：\n"
         for room in rooms:
             description += f"- {room}：\n"
             
@@ -383,10 +501,18 @@ class ConstraintVisualization:
                         orientation_desc = f"  朝向：{orientation}"
             description += orientation_desc + "\n"
             
-            # 连接关系
+            # 直接连接关系
             if connections[room]:
-                description += f"  连接：{', '.join(connections[room])}\n"
+                description += f"  直接连接：{', '.join(connections[room])}\n"
             else:
-                description += "  连接：无\n"
+                description += "  直接连接：无\n"
+            
+            # 邻接关系
+            if adjacencies[room]:
+                description += f"  空间邻接：{', '.join(adjacencies[room])}\n"
+            
+            # 与path的连接（如果有）
+            if has_path and room in path_connections:
+                description += "  通过流线空间连接：是\n"
         
         return description

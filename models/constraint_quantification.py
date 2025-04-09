@@ -46,8 +46,13 @@ class ConstraintQuantification:
         with open(PROMPT_TEMPLATE_CONSTRAINTS_ALL_PATH, 'r', encoding='utf-8') as f:
             template_all_with_comments = f.read()
         
+        # 读取约束条件基础提示词
+        with open('templates/constraint_base_prompt.txt', 'r', encoding='utf-8') as f:
+            CONSTRAINT_BASE_PROMPT = f.read()
+
         prompt_all = CONSTRAINT_QUANTIFICATION_PROMPT.format(
             base_prompt=BASE_PROMPT,
+            constraint_base_prompt=CONSTRAINT_BASE_PROMPT,
             user_requirement_guess=user_requirement_guess,
             spatial_understanding=spatial_understanding,
             constraint_template=template_all_with_comments

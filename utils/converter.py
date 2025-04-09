@@ -7,7 +7,7 @@ import os
 # 添加项目根目录到Python路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import CONSTRAINT_CONVERTER_PROMPT
+#from config import CONSTRAINT_CONVERTER_PROMPT
 from config import CONSTRAINT_QUANTIFICATION_MODEL  # 使用约束量化模块的模型
 
 class ConstraintConverter:
@@ -36,6 +36,10 @@ class ConstraintConverter:
         # 初始化结果
         constraints_rooms = {"rooms": {}}
         
+        # 复制special_spaces
+        if "special_spaces" in constraints_all:
+            constraints_rooms["special_spaces"] = constraints_all["special_spaces"]
+        
         # 获取房间列表
         room_list = constraints_all["hard_constraints"]["room_list"]
         
@@ -43,6 +47,7 @@ class ConstraintConverter:
         for room in room_list:
             constraints_rooms["rooms"][room] = {
                 "connection": [],
+                "adjacency": [],  # 添加adjacency字段
                 "area": {},
                 "orientation": "",
                 "window_access": False,
@@ -54,11 +59,24 @@ class ConstraintConverter:
         for connection_constraint in constraints_all["soft_constraints"]["connection"]["constraints"]:
             if "room pair" in connection_constraint and len(connection_constraint["room pair"]) == 2:
                 room1, room2 = connection_constraint["room pair"]
+                # 只处理房间列表中的房间，排除特殊空间如path和entrance
                 if room1 in constraints_rooms["rooms"] and room2 in constraints_rooms["rooms"]:
                     if room2 not in constraints_rooms["rooms"][room1]["connection"]:
                         constraints_rooms["rooms"][room1]["connection"].append(room2)
                     if room1 not in constraints_rooms["rooms"][room2]["connection"]:
                         constraints_rooms["rooms"][room2]["connection"].append(room1)
+        
+        # 转换adjacency约束
+        if "adjacency" in constraints_all["soft_constraints"]:
+            for adjacency_constraint in constraints_all["soft_constraints"]["adjacency"]["constraints"]:
+                if "room pair" in adjacency_constraint and len(adjacency_constraint["room pair"]) == 2:
+                    room1, room2 = adjacency_constraint["room pair"]
+                    # 只处理房间列表中的房间，排除特殊空间如path和entrance
+                    if room1 in constraints_rooms["rooms"] and room2 in constraints_rooms["rooms"]:
+                        if room2 not in constraints_rooms["rooms"][room1]["adjacency"]:
+                            constraints_rooms["rooms"][room1]["adjacency"].append(room2)
+                        if room1 not in constraints_rooms["rooms"][room2]["adjacency"]:
+                            constraints_rooms["rooms"][room2]["adjacency"].append(room1)
         
         # 转换area约束
         for area_constraint in constraints_all["soft_constraints"]["area"]["constraints"]:
@@ -104,7 +122,7 @@ class ConstraintConverter:
                         constraints_rooms["rooms"][room2]["repulsion"].append(room1)
         
         return constraints_rooms
-    
+   
     def rooms_to_all(self, constraints_rooms, original_all=None):
         """将rooms格式的约束条件转换为all格式
         
@@ -121,11 +139,16 @@ class ConstraintConverter:
                 "hard_constraints": {"room_list": []},
                 "soft_constraints": {
                     "connection": {"weight": 0.5, "constraints": []},
+                    "adjacency": {"weight": 0.5, "constraints": []},
                     "area": {"weight": 0.5, "constraints": []},
                     "orientation": {"weight": 0.5, "constraints": []},
                     "window_access": {"weight": 0.5, "constraints": []},
                     "aspect_ratio": {"weight": 0.5, "constraints": []},
                     "repulsion": {"weight": 0.5, "constraints": []}
+                },
+                "special_spaces": {
+                    "path": True,
+                    "entrance": True
                 }
             }
         
@@ -134,13 +157,22 @@ class ConstraintConverter:
             "hard_constraints": {"room_list": []},
             "soft_constraints": {
                 "connection": {"weight": 0.5, "constraints": []},
+                "adjacency": {"weight": 0.5, "constraints": []},
                 "area": {"weight": 0.5, "constraints": []},
                 "orientation": {"weight": 0.5, "constraints": []},
                 "window_access": {"weight": 0.5, "constraints": []},
                 "aspect_ratio": {"weight": 0.5, "constraints": []},
                 "repulsion": {"weight": 0.5, "constraints": []}
+            },
+            "special_spaces": {
+                "path": True,
+                "entrance": True
             }
         }
+        
+        # 复制special_spaces（如果有）
+        if "special_spaces" in constraints_rooms:
+            constraints_all["special_spaces"] = constraints_rooms["special_spaces"]
         
         # 如果有原始all格式，保留其权重设置
         if original_all and "soft_constraints" in original_all:
@@ -169,6 +201,21 @@ class ConstraintConverter:
                         "room_weight": 0.5  # 固定默认权重
                     })
                     processed_connections.add(connection_pair)
+            
+            # 转换adjacency约束
+            if "adjacency" in room_constraints:
+                processed_adjacencies = set()
+                for adjacent_room in room_constraints["adjacency"]:
+                    # 创建房间对的标识符（按字母顺序排序以确保唯一性）
+                    adjacency_pair = tuple(sorted([room, adjacent_room]))
+                    
+                    # 如果该邻接关系还未处理，添加到all格式中
+                    if adjacency_pair not in processed_adjacencies:
+                        constraints_all["soft_constraints"]["adjacency"]["constraints"].append({
+                            "room pair": [adjacency_pair[0], adjacency_pair[1]],
+                            "room_weight": 0.5  # 固定默认权重
+                        })
+                        processed_adjacencies.add(adjacency_pair)
             
             # 转换area约束
             if room_constraints["area"]:
@@ -223,5 +270,22 @@ class ConstraintConverter:
                         "room_weight": 0.5  # 固定默认权重
                     })
                     processed_repulsions.add(repulsion_pair)
+        
+        # 添加path和entrance的连接关系
+        if constraints_all["special_spaces"]["path"] and constraints_all["special_spaces"]["entrance"]:
+            # 检查是否已存在path-entrance连接
+            path_entrance_exists = False
+            for connection in constraints_all["soft_constraints"]["connection"]["constraints"]:
+                if "room pair" in connection:
+                    room_pair = connection["room pair"]
+                    if ("path" in room_pair and "entrance" in room_pair):
+                        path_entrance_exists = True
+                        break
+            
+            if not path_entrance_exists:
+                constraints_all["soft_constraints"]["connection"]["constraints"].append({
+                    "room pair": ["path", "entrance"],
+                    "room_weight": 1.0  # 最高权重，表示必要连接
+                })
         
         return constraints_all
