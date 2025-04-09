@@ -8,11 +8,12 @@ import matplotlib.pyplot as plt
 import matplotlib
 import networkx as nx
 import numpy as np
-from matplotlib.patches import Ellipse
+from matplotlib.patches import Ellipse, Rectangle
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 import matplotlib.colors as mcolors
 import matplotlib.font_manager as fm
+from collections import defaultdict
 
 # 添加项目根目录到Python路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -26,8 +27,25 @@ class ConstraintVisualization:
         """初始化约束条件可视化模块"""
         # 设置支持中文显示的字体
         self._setup_chinese_font()
-        # 准备颜色列表
-        self.colors = list(mcolors.TABLEAU_COLORS.values())  # 使用matplotlib内置的TABLEAU颜色
+        
+        # 艺术审美色卡 - 选择柔和、美观的配色方案
+        self.colors = [
+            "#E63946",  # 红色调
+            "#457B9D",  # 蓝色调
+            "#F4A261",  # 橙色调
+            "#2A9D8F",  # 绿松石色
+            "#F1FAEE",  # 淡奶油色
+            "#E9C46A",  # 金黄色
+            "#264653",  # 深青色
+            "#A8DADC",  # 淡蓝色
+            "#B5838D",  # 淡玫瑰色
+            "#FFB4A2",  # 淡珊瑚色
+            "#6D6875",  # 蓝灰色
+            "#CB997E",  # 棕褐色
+            "#FFCDB2",  # 淡橙色
+            "#B5838D",  # 玫瑰褐色
+            "#E5989B",  # 粉红色
+        ]
     
     def _setup_chinese_font(self):
         """设置支持中文的字体"""
@@ -130,9 +148,9 @@ class ConstraintVisualization:
             if room not in room_aspect_ratios:
                 room_aspect_ratios[room] = 1.0  # 默认长宽比为1.0
         
-        # 创建房间约束表格数据
+        # 创建房间约束表格数据（不包含path和entrance）
         room_table = []
-        for room in rooms:
+        for room in rooms:  # 只处理正式房间，排除special spaces
             # 获取该房间的约束条件
             area = "未指定"
             for area_constraint in constraints["soft_constraints"]["area"]["constraints"]:
@@ -158,31 +176,37 @@ class ConstraintVisualization:
                     max_ratio = ratio_constraint.get("max", "")
                     aspect_ratio = f"{min_ratio}-{max_ratio}" if min_ratio and max_ratio else "未指定"
             
-            # 获取直接连接的房间
+            # 获取直接连接的房间（排除path和entrance）
             connections = []
             for connection in constraints["soft_constraints"]["connection"]["constraints"]:
                 if "room pair" in connection:
                     room_pair = connection["room pair"]
                     if room in room_pair:
                         other_room = room_pair[0] if room_pair[1] == room else room_pair[1]
-                        connections.append(other_room)
+                        if other_room in rooms:  # 只包含正式房间
+                            connections.append(other_room)
             
-            # 获取邻接的房间
+            # 获取邻接的房间（排除path和entrance）
             adjacencies = []
             for adjacency in constraints["soft_constraints"].get("adjacency", {}).get("constraints", []):
                 if "room pair" in adjacency:
                     room_pair = adjacency["room pair"]
                     if room in room_pair:
                         other_room = room_pair[0] if room_pair[1] == room else room_pair[1]
-                        adjacencies.append(other_room)
+                        if other_room in rooms:  # 只包含正式房间
+                            adjacencies.append(other_room)
             
-            # 获取排斥的房间
+            # 获取排斥的房间（排除path和entrance）
             repulsions = []
             for repulsion in constraints["soft_constraints"]["repulsion"]["constraints"]:
                 if repulsion.get("room1") == room:
-                    repulsions.append(repulsion.get("room2"))
+                    repulsed_room = repulsion.get("room2")
+                    if repulsed_room in rooms:  # 只包含正式房间
+                        repulsions.append(repulsed_room)
                 elif repulsion.get("room2") == room:
-                    repulsions.append(repulsion.get("room1"))
+                    repulsed_room = repulsion.get("room1")
+                    if repulsed_room in rooms:  # 只包含正式房间
+                        repulsions.append(repulsed_room)
             
             # 添加到表格数据
             room_table.append({
@@ -201,9 +225,10 @@ class ConstraintVisualization:
             # 创建一个更大的图形
             plt.figure(figsize=(14, 10))
             
-            # 设置节点位置，使用spring_layout算法
-            pos = nx.spring_layout(G, seed=42)
+            # 设置节点位置，使用spring_layout算法，更加紧凑
+            pos = nx.spring_layout(G, seed=42, k=0.15)  # 较小的k值会使布局更紧凑
             
+            # 先绘制边，以便节点能覆盖它们
             # 绘制连接关系边（实线）
             nx.draw_networkx_edges(
                 G, pos, 
@@ -213,14 +238,15 @@ class ConstraintVisualization:
                 edge_color='gray'
             )
             
-            # 绘制邻接关系边（虚线）
+            # 绘制邻接关系边（更加稀疏的虚线）
             nx.draw_networkx_edges(
                 G, pos, 
                 edgelist=adjacency_edges,
                 width=1.2, 
                 alpha=0.7, 
                 edge_color='blue',
-                style='dashed'
+                style='dashed',
+                #dashes=(2, 5)  # 控制虚线样式，使其更加稀疏
             )
             
             # 为每个房间分配一个颜色
@@ -230,39 +256,42 @@ class ConstraintVisualization:
             
             # 为特殊节点设置颜色
             if "path" in G.nodes():
-                room_colors["path"] = "red"
+                room_colors["path"] = "#9B2226"  # 深红色
             if "entrance" in G.nodes():
-                room_colors["entrance"] = "green"
+                room_colors["entrance"] = "#006D77"  # 青蓝色
             
-            # 绘制椭圆形状的节点，大小基于面积，形状基于长宽比，颜色为唯一的房间颜色
+            # 绘制节点（放在边之后以便覆盖边）
             ax = plt.gca()
             for node, (x, y) in pos.items():
-                # 特殊处理path和entrance
+                # 特殊处理path和entrance（使用矩形）
                 if node == "path":
-                    # Path使用较大的圆形
-                    circle = plt.Circle((x, y), 0.1, fill=True, alpha=0.7,
-                                       color=room_colors[node], edgecolor='black', linewidth=1.5)
-                    ax.add_patch(circle)
+                    # Path使用矩形
+                    rect = Rectangle((x-0.12, y-0.08), 0.24, 0.16, 
+                                   angle=0, fill=True, alpha=0.8,
+                                   color=room_colors[node], edgecolor='black', linewidth=1.5)
+                    ax.add_patch(rect)
                     continue
                 elif node == "entrance":
-                    # Entrance使用菱形
-                    diamond = plt.Rectangle((x-0.07, y-0.07), 0.14, 0.14, angle=45, fill=True, alpha=0.7,
-                                           color=room_colors[node], edgecolor='black', linewidth=1.5)
-                    ax.add_patch(diamond)
+                    # Entrance使用矩形
+                    rect = Rectangle((x-0.10, y-0.10), 0.20, 0.20, 
+                                   angle=0, fill=True, alpha=0.8,
+                                   color=room_colors[node], edgecolor='black', linewidth=1.5)
+                    ax.add_patch(rect)
                     continue
                 
-                # 普通房间节点
-                area = room_areas.get(node, 15)  # 默认面积为15
-                aspect_ratio = room_aspect_ratios.get(node, 1.0)  # 默认长宽比为1.0
-                
-                # 计算椭圆的宽度和高度
-                width = np.sqrt(area * aspect_ratio) * 0.05
-                height = np.sqrt(area / aspect_ratio) * 0.05
-                
-                # 创建椭圆
-                ellipse = Ellipse((x, y), width, height, fill=True, alpha=0.7, 
-                                 color=room_colors[node], edgecolor='black', linewidth=1.5)
-                ax.add_patch(ellipse)
+                # 普通房间节点使用椭圆
+                if node in room_areas and node in room_aspect_ratios:
+                    area = room_areas[node]
+                    aspect_ratio = room_aspect_ratios[node]
+                    
+                    # 计算椭圆的宽度和高度
+                    width = np.sqrt(area * aspect_ratio) * 0.05
+                    height = np.sqrt(area / aspect_ratio) * 0.05
+                    
+                    # 创建椭圆
+                    ellipse = Ellipse((x, y), width, height, fill=True, alpha=0.8, 
+                                    color=room_colors[node], edgecolor='black', linewidth=1.5)
+                    ax.add_patch(ellipse)
             
             # 绘制节点标签（房间名称）
             nx.draw_networkx_labels(G, pos, font_size=12, font_weight="bold", font_color="black")
@@ -275,7 +304,7 @@ class ConstraintVisualization:
             # 添加图例说明
             legend_elements = [
                 plt.Line2D([0], [0], color='gray', lw=1.5, label='直接连接'),
-                plt.Line2D([0], [0], color='blue', lw=1.2, linestyle='dashed', label='空间邻接')
+                plt.Line2D([0], [0], color='blue', lw=1.2, linestyle='dashed', dashes=(2, 5), label='空间邻接')
             ]
             
             # 为每个房间添加一个图例项
@@ -288,13 +317,13 @@ class ConstraintVisualization:
             # 为特殊空间添加图例（如果存在）
             if "path" in G.nodes():
                 legend_elements.append(
-                    plt.Line2D([0], [0], marker='o', color='w', label='流线空间(path)',
-                              markerfacecolor='red', markersize=10)
+                    plt.Line2D([0], [0], marker='s', color='w', label='流线空间(path)',
+                              markerfacecolor=room_colors["path"], markersize=10)
                 )
             if "entrance" in G.nodes():
                 legend_elements.append(
-                    plt.Line2D([0], [0], marker='o', color='w', label='入口(entrance)',
-                              markerfacecolor='green', markersize=10)
+                    plt.Line2D([0], [0], marker='s', color='w', label='入口(entrance)',
+                              markerfacecolor=room_colors["entrance"], markersize=10)
                 )
             
             plt.legend(handles=legend_elements, loc='best', fontsize=10)
@@ -516,3 +545,307 @@ class ConstraintVisualization:
                 description += "  通过流线空间连接：是\n"
         
         return description
+        
+    def compare_constraints(self, old_constraints, new_constraints, output_path=None):
+        """比较两个约束条件，生成差异表格
+        
+        Args:
+            old_constraints (dict): 原约束条件（all格式）
+            new_constraints (dict): 新约束条件（all格式）
+            output_path (str, optional): 输出图像的保存路径
+            
+        Returns:
+            list: 差异表格数据
+        """
+        diff_table = []
+        
+        # 比较房间列表
+        old_rooms = set(old_constraints["hard_constraints"]["room_list"])
+        new_rooms = set(new_constraints["hard_constraints"]["room_list"])
+        
+        # 添加/删除的房间
+        added_rooms = new_rooms - old_rooms
+        removed_rooms = old_rooms - new_rooms
+        
+        if added_rooms:
+            diff_table.append({
+                "约束类型": "房间列表",
+                "修改类型": "添加房间",
+                "原值": "无",
+                "新值": ", ".join(added_rooms)
+            })
+            
+        if removed_rooms:
+            diff_table.append({
+                "约束类型": "房间列表",
+                "修改类型": "删除房间",
+                "原值": ", ".join(removed_rooms),
+                "新值": "无"
+            })
+        
+        # 比较软约束
+        for constraint_type in ["connection", "adjacency", "area", "orientation", "window_access", "aspect_ratio", "repulsion"]:
+            self._compare_constraint_type(old_constraints, new_constraints, constraint_type, diff_table)
+        
+        # 保存差异表格为图片
+        if output_path and diff_table:
+            self.save_table_as_image(diff_table, output_path)
+            
+        return diff_table
+    
+    def _compare_constraint_type(self, old_constraints, new_constraints, constraint_type, diff_table):
+        """比较特定类型的约束条件
+        
+        Args:
+            old_constraints (dict): 原约束条件
+            new_constraints (dict): 新约束条件
+            constraint_type (str): 约束类型
+            diff_table (list): 差异表格数据
+        """
+        # 检查约束类型权重是否变化
+        old_weight = old_constraints["soft_constraints"].get(constraint_type, {}).get("weight", 0)
+        new_weight = new_constraints["soft_constraints"].get(constraint_type, {}).get("weight", 0)
+        
+        if old_weight != new_weight:
+            diff_table.append({
+                "约束类型": constraint_type,
+                "修改类型": "权重变化",
+                "原值": str(old_weight),
+                "新值": str(new_weight)
+            })
+        
+        # 获取约束列表
+        old_constraints_list = old_constraints["soft_constraints"].get(constraint_type, {}).get("constraints", [])
+        new_constraints_list = new_constraints["soft_constraints"].get(constraint_type, {}).get("constraints", [])
+        
+        # 为不同类型的约束使用不同的比较方法
+        if constraint_type in ["connection", "adjacency"]:
+            self._compare_pair_constraints(old_constraints_list, new_constraints_list, constraint_type, diff_table)
+        elif constraint_type == "repulsion":
+            self._compare_repulsion_constraints(old_constraints_list, new_constraints_list, diff_table)
+        else:
+            self._compare_single_room_constraints(old_constraints_list, new_constraints_list, constraint_type, diff_table)
+    
+    def _compare_pair_constraints(self, old_list, new_list, constraint_type, diff_table):
+        """比较房间对约束（connection, adjacency）
+        
+        Args:
+            old_list (list): 原约束列表
+            new_list (list): 新约束列表
+            constraint_type (str): 约束类型
+            diff_table (list): 差异表格
+        """
+        # 提取房间对
+        old_pairs = set()
+        for item in old_list:
+            if "room pair" in item and len(item["room pair"]) == 2:
+                # 对房间对进行排序，确保相同对的顺序一致
+                pair = tuple(sorted(item["room pair"]))
+                old_pairs.add(pair)
+        
+        new_pairs = set()
+        for item in new_list:
+            if "room pair" in item and len(item["room pair"]) == 2:
+                pair = tuple(sorted(item["room pair"]))
+                new_pairs.add(pair)
+        
+        # 添加新的房间对
+        added_pairs = new_pairs - old_pairs
+        if added_pairs:
+            for pair in added_pairs:
+                diff_table.append({
+                    "约束类型": constraint_type,
+                    "修改类型": "新增连接关系",
+                    "原值": "无",
+                    "新值": f"{pair[0]} - {pair[1]}"
+                })
+        
+        # 删除的房间对
+        removed_pairs = old_pairs - new_pairs
+        if removed_pairs:
+            for pair in removed_pairs:
+                diff_table.append({
+                    "约束类型": constraint_type,
+                    "修改类型": "删除连接关系",
+                    "原值": f"{pair[0]} - {pair[1]}",
+                    "新值": "无"
+                })
+    
+    def _compare_repulsion_constraints(self, old_list, new_list, diff_table):
+        """比较排斥约束
+        
+        Args:
+            old_list (list): 原约束列表
+            new_list (list): 新约束列表
+            diff_table (list): 差异表格
+        """
+        # 提取房间对
+        old_pairs = set()
+        for item in old_list:
+            if "room1" in item and "room2" in item:
+                # 对房间对进行排序，确保相同对的顺序一致
+                pair = tuple(sorted([item["room1"], item["room2"]]))
+                old_pairs.add(pair)
+        
+        new_pairs = set()
+        for item in new_list:
+            if "room1" in item and "room2" in item:
+                pair = tuple(sorted([item["room1"], item["room2"]]))
+                new_pairs.add(pair)
+        
+        # 添加新的排斥关系
+        added_pairs = new_pairs - old_pairs
+        if added_pairs:
+            for pair in added_pairs:
+                diff_table.append({
+                    "约束类型": "repulsion",
+                    "修改类型": "新增排斥关系",
+                    "原值": "无",
+                    "新值": f"{pair[0]} - {pair[1]}"
+                })
+        
+        # 删除的排斥关系
+        removed_pairs = old_pairs - new_pairs
+        if removed_pairs:
+            for pair in removed_pairs:
+                diff_table.append({
+                    "约束类型": "repulsion",
+                    "修改类型": "删除排斥关系",
+                    "原值": f"{pair[0]} - {pair[1]}",
+                    "新值": "无"
+                })
+                
+        # 最小距离变化
+        for old_item in old_list:
+            if "room1" in old_item and "room2" in old_item and "min_distance" in old_item:
+                room1, room2 = old_item["room1"], old_item["room2"]
+                old_min_distance = old_item["min_distance"]
+                
+                # 查找新列表中对应项
+                for new_item in new_list:
+                    if (new_item.get("room1") == room1 and new_item.get("room2") == room2) or \
+                       (new_item.get("room1") == room2 and new_item.get("room2") == room1):
+                        if "min_distance" in new_item and new_item["min_distance"] != old_min_distance:
+                            diff_table.append({
+                                "约束类型": "repulsion",
+                                "修改类型": f"最小距离变化 ({room1}-{room2})",
+                                "原值": str(old_min_distance),
+                                "新值": str(new_item["min_distance"])
+                            })
+    
+    def _compare_single_room_constraints(self, old_list, new_list, constraint_type, diff_table):
+        """比较单个房间约束（area, orientation, window_access, aspect_ratio）
+        
+        Args:
+            old_list (list): 原约束列表
+            new_list (list): 新约束列表
+            constraint_type (str): 约束类型
+            diff_table (list): 差异表格
+        """
+        # 按房间名组织约束
+        old_room_constraints = {}
+        for item in old_list:
+            if "room" in item:
+                old_room_constraints[item["room"]] = item
+                
+        new_room_constraints = {}
+        for item in new_list:
+            if "room" in item:
+                new_room_constraints[item["room"]] = item
+        
+        # 检查新增的房间约束
+        for room in new_room_constraints:
+            if room not in old_room_constraints:
+                constraint_desc = self._format_constraint_value(new_room_constraints[room], constraint_type)
+                diff_table.append({
+                    "约束类型": constraint_type,
+                    "修改类型": f"新增{room}约束",
+                    "原值": "无",
+                    "新值": constraint_desc
+                })
+            else:
+                # 比较约束值是否变化
+                old_item = old_room_constraints[room]
+                new_item = new_room_constraints[room]
+                
+                if constraint_type == "area":
+                    # 比较面积范围
+                    old_min = old_item.get("min", "未指定")
+                    old_max = old_item.get("max", "未指定")
+                    new_min = new_item.get("min", "未指定")
+                    new_max = new_item.get("max", "未指定")
+                    
+                    if old_min != new_min or old_max != new_max:
+                        diff_table.append({
+                            "约束类型": "area",
+                            "修改类型": f"{room}面积变化",
+                            "原值": f"min:{old_min}, max:{old_max}",
+                            "新值": f"min:{new_min}, max:{new_max}"
+                        })
+                        
+                elif constraint_type == "aspect_ratio":
+                    # 比较长宽比范围
+                    old_min = old_item.get("min", "未指定")
+                    old_max = old_item.get("max", "未指定")
+                    new_min = new_item.get("min", "未指定")
+                    new_max = new_item.get("max", "未指定")
+                    
+                    if old_min != new_min or old_max != new_max:
+                        diff_table.append({
+                            "约束类型": "aspect_ratio",
+                            "修改类型": f"{room}长宽比变化",
+                            "原值": f"min:{old_min}, max:{old_max}",
+                            "新值": f"min:{new_min}, max:{new_max}"
+                        })
+                        
+                elif constraint_type == "orientation":
+                    # 比较朝向
+                    old_direction = old_item.get("direction", "未指定")
+                    new_direction = new_item.get("direction", "未指定")
+                    
+                    if old_direction != new_direction:
+                        diff_table.append({
+                            "约束类型": "orientation",
+                            "修改类型": f"{room}朝向变化",
+                            "原值": old_direction,
+                            "新值": new_direction
+                        })
+        
+        # 检查删除的房间约束
+        for room in old_room_constraints:
+            if room not in new_room_constraints:
+                constraint_desc = self._format_constraint_value(old_room_constraints[room], constraint_type)
+                diff_table.append({
+                    "约束类型": constraint_type,
+                    "修改类型": f"删除{room}约束",
+                    "原值": constraint_desc,
+                    "新值": "无"
+                })
+    
+    def _format_constraint_value(self, constraint, constraint_type):
+        """格式化约束值描述
+        
+        Args:
+            constraint (dict): 约束条件
+            constraint_type (str): 约束类型
+            
+        Returns:
+            str: 格式化的约束值描述
+        """
+        if constraint_type == "area":
+            min_area = constraint.get("min", "未指定")
+            max_area = constraint.get("max", "未指定")
+            return f"min:{min_area}, max:{max_area}"
+            
+        elif constraint_type == "aspect_ratio":
+            min_ratio = constraint.get("min", "未指定")
+            max_ratio = constraint.get("max", "未指定")
+            return f"min:{min_ratio}, max:{max_ratio}"
+            
+        elif constraint_type == "orientation":
+            return constraint.get("direction", "未指定")
+            
+        elif constraint_type == "window_access":
+            return "需要窗户"
+            
+        return str(constraint)

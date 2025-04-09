@@ -24,7 +24,7 @@ class ConstraintQuantification:
         """
         self.openai_client = openai_client
     
-    def generate_constraints(self, user_requirement_guess, spatial_understanding):
+    def generate_constraints(self, user_requirement_guess, spatial_understanding, if_rooms_constraints):
         """生成约束条件
         
         Args:
@@ -80,7 +80,9 @@ class ConstraintQuantification:
         except (json.JSONDecodeError, TypeError):
             # 如果解析失败，使用空模板
             constraints_all = constraint_template_all
-        
+        if not if_rooms_constraints:
+            return constraints_all
+    
         # 步骤2: 将all格式转换为rooms格式
         from utils.converter import ConstraintConverter
         converter = ConstraintConverter()

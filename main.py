@@ -23,12 +23,14 @@ load_dotenv()
 class ArchitectureAISystem:
     """建筑布局设计AI系统的主类，控制整个交互流程"""
     
-    def __init__(self, resume_session_path=None):
+    def __init__(self, resume_session_path=None, input_file="input.json", if_rooms_constraints=False):
         """初始化系统各组件
         
         Args:
             resume_session_path (str, optional): 恢复会话的路径。如果提供，将从该路径恢复会话状态。
         """
+        self.input_file = input_file
+        self.if_rooms_constraints = if_rooms_constraints
         # 初始化会话记录管理器
         self.session_manager = SessionManager()
         
@@ -276,7 +278,7 @@ class ArchitectureAISystem:
             else:  # template_constraints_rooms.txt
                 return {"rooms": {}}
     
-    def load_input_json(self, file_path="input.json"):
+    def load_input_json(self):
         """从JSON文件加载初始输入数据
         
         Args:
@@ -285,6 +287,7 @@ class ArchitectureAISystem:
         Returns:
             dict: 包含spatial_info和user_requirement的字典，如果加载失败则返回None
         """
+        file_path = self.input_file 
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
@@ -486,7 +489,7 @@ class ArchitectureAISystem:
                 
                 # 优化约束条件
                 print("正在根据您的反馈优化约束条件...")
-                refined_constraints = self.constraint_refinement.refine_constraints(
+                refined_constraints, diff_table = self.constraint_refinement.refine_constraints(
                     self.constraints_all,
                     user_input,
                     self.spatial_understanding_record
@@ -500,6 +503,19 @@ class ArchitectureAISystem:
                 self.session_manager.update_constraints(
                     {"all": self.constraints_all, "rooms": self.constraints_rooms}
                 )
+                
+                # 如果有变化，显示变化表格
+                if diff_table:
+                    print("\n约束条件变化：")
+                    diff_table_path = os.path.join(
+                        self.session_manager.get_session_dir(), 
+                        f"constraints_diff_{self.workflow_manager.current_iteration}.png"
+                    )
+                    self.constraint_visualization.save_table_as_image(diff_table, diff_table_path)
+                    self.constraint_visualization.print_room_table(diff_table)
+                    print(f"\n变化对比表格已保存至：{diff_table_path}")
+                else:
+                    print("\n约束条件未发生变化。")
                 
                 # 重新可视化和打印优化后的约束条件
                 viz_result = self.constraint_visualization.visualize_constraints(
@@ -579,7 +595,7 @@ class ArchitectureAISystem:
                 
                 # 优化约束条件
                 print("正在根据您的反馈优化约束条件...")
-                refined_constraints = self.solution_refinement.refine_solution(
+                refined_constraints, diff_table = self.solution_refinement.refine_solution(
                     self.constraints_all,
                     self.current_solution,
                     user_input,
@@ -595,6 +611,19 @@ class ArchitectureAISystem:
                     {"all": self.constraints_all, "rooms": self.constraints_rooms}
                 )
                 
+                # 如果有变化，显示变化表格
+                if diff_table:
+                    print("\n根据布局反馈优化的约束条件变化：")
+                    diff_table_path = os.path.join(
+                        self.session_manager.get_session_dir(), 
+                        f"solution_constraints_diff_{self.workflow_manager.current_iteration}.png"
+                    )
+                    self.constraint_visualization.save_table_as_image(diff_table, diff_table_path)
+                    self.constraint_visualization.print_room_table(diff_table)
+                    print(f"\n变化对比表格已保存至：{diff_table_path}")
+                else:
+                    print("\n约束条件未发生变化。")
+                
                 # 重新可视化约束条件
                 viz_result = self.constraint_visualization.visualize_constraints(
                     self.constraints_all,
@@ -603,7 +632,7 @@ class ArchitectureAISystem:
                         f"constraints_visualization_solution_refined_{self.workflow_manager.current_iteration}.png"
                     )
                 )
-                
+
                 # 打印约束条件表格
                 print("\n基于反馈优化后的约束条件表格：")
                 self.constraint_visualization.print_room_table(viz_result["room_table"])
@@ -643,26 +672,26 @@ class ArchitectureAISystem:
                 return False
         return True
     
-    def finalize_constraints(self):
-        """生成最终的约束条件"""
-        # 使用约束条件量化模块将用户需求猜测转化为约束条件
-        constraints_all = self.constraint_quantification.generate_constraints(
-            self.user_requirement_guess, self.spatial_understanding_record
-        )
+    # def finalize_constraints(self):
+    #     """生成最终的约束条件"""
+    #     # 使用约束条件量化模块将用户需求猜测转化为约束条件
+    #     constraints_all = self.constraint_quantification.generate_constraints(
+    #         self.user_requirement_guess, self.spatial_understanding_record
+    #     )
         
-        # 转换为rooms格式
-        constraints_rooms = self.converter.all_to_rooms(constraints_all)
+    #     # 转换为rooms格式
+    #     constraints_rooms = self.converter.all_to_rooms(constraints_all)
         
-        # 保存约束条件
-        self.constraints_all = constraints_all
-        self.constraints_rooms = constraints_rooms
+    #     # 保存约束条件
+    #     self.constraints_all = constraints_all
+    #     self.constraints_rooms = constraints_rooms
         
-        # 记录约束条件状态
-        self.session_manager.update_constraints(
-            {"all": constraints_all, "rooms": constraints_rooms}
-        )
+    #     # 记录约束条件状态
+    #     self.session_manager.update_constraints(
+    #         {"all": constraints_all, "rooms": constraints_rooms}
+    #     )
         
-        return constraints_all
+    #     return constraints_all
     
     def call_solver(self, constraints):
         """调用布局求解器（仅保留接口）"""
@@ -716,43 +745,45 @@ class ArchitectureAISystem:
         }
     
     def finalize_constraints(self):
-            """生成最终的约束条件"""
-            # 使用约束条件量化模块将用户需求猜测转化为约束条件
-            constraints_all = self.constraint_quantification.generate_constraints(
-                self.user_requirement_guess, self.spatial_understanding_record
-            )
-            
-            # 检查并添加path和entrance
-            from utils.constraint_validator import ConstraintValidator
-            validator = ConstraintValidator()
-            
-            # 确保约束中包含path和entrance
-            constraints_all, path_modified = validator.validate_and_add_path_entrance(constraints_all)
-            
-            # 检查所有房间的可达性，添加必要的path连接
-            constraints_all, reachability_modified = validator.validate_connectivity(constraints_all)
-            
-            if path_modified or reachability_modified:
-                print("已添加流线空间(path)和入口(entrance)，并确保所有房间可达性。")
-            
-            # 转换为rooms格式
-            constraints_rooms = self.converter.all_to_rooms(constraints_all)
-            
-            # 保存约束条件
-            self.constraints_all = constraints_all
-            self.constraints_rooms = constraints_rooms
-            
-            # 记录约束条件状态
-            self.session_manager.update_constraints(
-                {"all": constraints_all, "rooms": constraints_rooms}
-            )
-            
-            return constraints_all
+        """生成最终的约束条件"""
+        # 使用约束条件量化模块将用户需求猜测转化为约束条件
+        constraints_all = self.constraint_quantification.generate_constraints(
+            self.user_requirement_guess, self.spatial_understanding_record, self.if_rooms_constraints
+        )
+        
+        # 检查并添加path和entrance
+        from utils.constraint_validator import ConstraintValidator
+        validator = ConstraintValidator()
+        
+        # 确保约束中包含path和entrance
+        constraints_all, path_modified = validator.validate_and_add_path_entrance(constraints_all)
+        
+        # 检查所有房间的可达性，添加必要的path连接
+        constraints_all, reachability_modified = validator.validate_connectivity(constraints_all)
+        
+        if path_modified or reachability_modified:
+            print("已添加流线空间(path)和入口(entrance)，并确保所有房间可达性。")
+        
+        # 转换为rooms格式
+        constraints_rooms = self.converter.all_to_rooms(constraints_all)
+        
+        # 保存约束条件
+        self.constraints_all = constraints_all
+        self.constraints_rooms = constraints_rooms
+        
+        # 记录约束条件状态
+        self.session_manager.update_constraints(
+            {"all": constraints_all, "rooms": constraints_rooms}
+        )
+        
+        return constraints_all
     
 def parse_args():
     """解析命令行参数"""
     parser = argparse.ArgumentParser(description='建筑布局设计AI系统')
     parser.add_argument('--resume', type=str, help='恢复会话的路径')
+    parser.add_argument('--input', type=str, default='input.json', help='初始输入文件路径')
+    parser.add_argument('--if_rooms_constraints', type=bool, default=False, help='是否使用rooms格式约束条件')
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -760,5 +791,5 @@ if __name__ == "__main__":
     args = parse_args()
     
     # 初始化系统，如果提供了会话路径则从会话恢复
-    system = ArchitectureAISystem(resume_session_path=args.resume)
+    system = ArchitectureAISystem(resume_session_path=args.resume, input_file=args.input, if_rooms_constraints=args.if_rooms_constraints)
     system.start_interaction()
