@@ -1,0 +1,128 @@
+/* Main chat styling */
+.chat-history {
+    height: 400px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    padding: 15px;
+    border-radius: 5px;
+    display: flex;
+    flex-direction: column;
+}
+
+.user-message {
+    background-color: #f1f0f0;
+    border-radius: 15px 15px 0 15px;
+    padding: 10px 15px;
+    margin-bottom: 10px;
+    max-width: 80%;
+    align-self: flex-end;
+    margin-left: auto;
+    word-wrap: break-word;
+}
+
+.system-message {
+    background-color: #0d6efd;
+    color: white;
+    border-radius: 15px 15px 15px 0;
+    padding: 10px 15px;
+    margin-bottom: 10px;
+    max-width: 80%;
+    align-self: flex-start;
+    word-wrap: break-word;
+}
+
+/* Visualization containers */
+.placeholder-text {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 300px;
+    color: #aaa;
+    border: 1px dashed #ddd;
+    border-radius: 5px;
+}
+
+.visualization-container {
+    min-height: 300px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Status indicators */
+#keyQuestionsTable .status-known {
+    color: #198754;
+    font-weight: bold;
+}
+
+#keyQuestionsTable .status-unknown {
+    color: #dc3545;
+}
+
+/* Stage indicators */
+.stage-indicator {
+    display: inline-block;
+    padding: 5px 10px;
+    border-radius: 5px;
+    background-color: #6c757d;
+    color: white;
+    margin-right: 10px;
+}
+
+.stage-active {
+    background-color: #0d6efd;
+    font-weight: bold;
+}
+
+/* Loading spinner */
+.spinner-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 150px;
+}
+
+.spinner {
+    width: 3rem;
+    height: 3rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .chat-history {
+        height: 300px;
+    }
+    
+    .visualization-container {
+        min-height: 250px;
+    }
+}
+
+/* Some animations for transitions */
+.fade-in {
+    animation: fadeIn 0.5s;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Stages progress bar */
+#stageProgress {
+    transition: width 0.6s ease;
+    position: relative;
+}
+
+#stageProgress::after {
+    content: attr(data-label);
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+}
