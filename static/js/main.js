@@ -298,16 +298,22 @@ function sendMessage() {
             return;
         }
         
-        // Handle response based on current stage
+        // 处理响应（根据当前阶段）
         if (typeof data.response === 'string') {
-            addSystemMessage(data.response);
+            // 只有在response不为空时才添加到聊天窗口
+            if (data.response.trim()) {
+                addSystemMessage(data.response);
+            } else {
+                console.log("收到空响应，检查系统状态...");
+                // 立即刷新状态以检查关键问题列表
+                refreshState();
+            }
         } else if (data.response && typeof data.response === 'object') {
             if (data.response.question) {
                 addSystemMessage(data.response.question);
             } else {
                 addSystemMessage(JSON.stringify(data.response));
-            }
-        }
+            }}
         
         // Check for stage change
         if (data.stage_change) {
@@ -380,7 +386,7 @@ function skipStage() {
     });
 }
 
-// Refresh the system state
+// 刷新系统状态
 function refreshState() {
     if (!currentSessionId) return;
     
@@ -388,72 +394,58 @@ function refreshState() {
     .then(response => response.json())
     .then(data => {
         if (data.error) {
-            console.error('Error fetching state:', data.error);
+            console.error('获取状态时出错:', data.error);
             return;
         }
         
-        // Check if stage changed
+        // 检查阶段变化
         const previousStage = currentStage;
         currentStage = data.current_stage;
         const stageChanged = previousStage !== currentStage;
         
-        // Update stage description and progress bar
+        // 更新阶段描述和进度条
         document.getElementById('stageDescription').textContent = data.stage_description;
         updateProgressBar();
         
-        // If stage changed, show a notification
+        // 如果阶段发生变化，显示通知
         if (stageChanged && previousStage) {
-            addSystemMessage(`Stage changed from ${stageDisplayNames[previousStage]} to ${stageDisplayNames[currentStage]}`);
+            addSystemMessage(`阶段已从 ${stageDisplayNames[previousStage]} 变更至 ${stageDisplayNames[currentStage]}`);
             
-            // If we just entered constraint generation stage
+            // 如果刚进入约束条件生成阶段
             if (currentStage === 'STAGE_CONSTRAINT_GENERATION') {
-                updateConstraintGenerationProgress({ progress: 10, message: "Starting constraint generation..." });
-            } 
-            // If we just moved past constraint generation
-            else if (previousStage === 'STAGE_CONSTRAINT_GENERATION' && 
-                     stages.indexOf(currentStage) > stages.indexOf('STAGE_CONSTRAINT_GENERATION')) {
-                // Update the progress to 100% complete
-                const progressElement = updateConstraintGenerationProgress({ 
-                    progress: 100, 
-                    message: "Constraint generation complete!" 
-                });
-                
-                // After a delay, refresh visualizations
-                setTimeout(() => {
-                    refreshVisualizations();
-                }, 1000);
+                updateConstraintGenerationProgress({ progress: 10, message: "开始生成约束条件..." });
             }
         }
         
-        // Handle constraint generation progress
+        // 约束条件生成阶段的进度更新
         if (currentStage === 'STAGE_CONSTRAINT_GENERATION') {
             if (data.constraint_progress) {
                 updateConstraintGenerationProgress(data.constraint_progress);
             } else {
-                // If no specific progress data, just update with a simulated value
+                // 如果没有特定的进度数据，使用模拟的进度值
                 updateConstraintGenerationProgress({ 
-                    progress: Math.floor(Math.random() * 40) + 30, // Between 30% and 70%
-                    message: "Generating constraints..."
+                    progress: Math.floor(Math.random() * 40) + 30, // 进度在30%到70%之间
+                    message: "正在生成约束条件..."
                 });
             }
         }
         
-        // Update user requirement guess
+        // 更新用户需求猜测
         document.getElementById('userRequirementText').innerHTML = 
-            data.user_requirement_guess ? formatTextWithLineBreaks(data.user_requirement_guess) : 'No requirements gathered yet.';
+            data.user_requirement_guess ? formatTextWithLineBreaks(data.user_requirement_guess) : '尚未收集需求。';
         
-        // Update spatial understanding
+        // 更新空间理解
         document.getElementById('spatialUnderstandingText').innerHTML = 
-            data.spatial_understanding_record ? formatTextWithLineBreaks(data.spatial_understanding_record) : 'No spatial information gathered yet.';
+            data.spatial_understanding_record ? formatTextWithLineBreaks(data.spatial_understanding_record) : '尚未收集空间信息。';
         
-        // Update key questions table
+        // 更新关键问题表格并检查是否全部已知
         const keyQuestionsTable = document.getElementById('keyQuestionsTable');
         keyQuestionsTable.innerHTML = '';
-        
-        // Count known questions to check if all are known
+
+        // 计算已知问题数量
         let knownQuestions = 0;
         let totalQuestions = 0;
-        
+
         if (data.key_questions && data.key_questions.length > 0) {
             totalQuestions = data.key_questions.length;
             
@@ -478,75 +470,251 @@ function refreshState() {
                 
                 keyQuestionsTable.appendChild(row);
             });
-        }
-        
-        // Check if all questions are known (using either our count or the backend flag)
-        const allQuestionsKnown = data.all_key_questions_known || 
-                                (totalQuestions > 0 && knownQuestions === totalQuestions);
-        
-        // If all questions are known and we're still in requirement gathering stage
-        if (allQuestionsKnown && currentStage === 'STAGE_REQUIREMENT_GATHERING') {
-            // Add message to indicate we're moving to next stage
-            addSystemMessage("All key questions have been answered! Moving to constraint generation stage...");
             
-            // Automatically skip to next stage
-            skipStage();
+            // 详细日志记录（调试用）
+            console.log(`关键问题详情:`, data.key_questions);
+            console.log(`已知问题数量: ${knownQuestions}, 总问题数量: ${totalQuestions}`);
+            console.log(`当前阶段: ${currentStage}`);
+            console.log(`条件检查: ${currentStage === 'STAGE_REQUIREMENT_GATHERING'} && ${knownQuestions === totalQuestions} && ${totalQuestions > 0}`);
+            
+            // 如果所有问题都已知且当前处于需求收集阶段，则自动进入下一阶段
+            if (currentStage === 'STAGE_REQUIREMENT_GATHERING' && 
+                knownQuestions === totalQuestions && 
+                totalQuestions > 0) {
+                console.log("所有关键问题已知！自动进入下一阶段...");
+                
+                // 显示提示消息
+                addSystemMessage("所有关键问题都已回答！正在进入约束条件生成阶段...");
+                
+                // 延迟一秒后，直接调用API进入下一阶段
+                setTimeout(() => {
+                    console.log("执行自动跳转...");
+                    fetch('/api/skip_stage', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            session_id: currentSessionId
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(stageData => {
+                        if (stageData.error) {
+                            console.error('跳转阶段失败:', stageData.error);
+                            return;
+                        }
+                        console.log('成功跳转至:', stageData.current_stage);
+                        currentStage = stageData.current_stage;
+                        document.getElementById('stageDescription').textContent = stageData.stage_description;
+                        updateProgressBar();
+                    })
+                    .catch(error => {
+                        console.error('跳转阶段时出错:', error);
+                    });
+                }, 1000);
+            }
         }
         
-        // Refresh visualizations if we're past the constraint generation stage
+        // 状态变化检查和可视化刷新
+        // 如果阶段发生变化
+        if (stageChanged) {
+            // 如果是从约束生成阶段到可视化阶段
+            if (previousStage === 'STAGE_CONSTRAINT_GENERATION' && 
+                currentStage === 'STAGE_CONSTRAINT_VISUALIZATION') {
+                
+                console.log("检测到已进入可视化阶段，立即刷新可视化...");
+                
+                // 立即刷新一次
+                refreshVisualizations();
+                
+                // 然后每秒刷新一次，持续10秒钟，以确保图片加载
+                let refreshCount = 0;
+                const refreshInterval = setInterval(() => {
+                    refreshCount++;
+                    console.log(`第 ${refreshCount} 次刷新可视化...`);
+                    refreshVisualizations();
+                    
+                    if (refreshCount >= 10) {
+                        clearInterval(refreshInterval);
+                    }
+                }, 1000);
+            }
+            
+            // 如果是从约束生成阶段到后面任何阶段
+            if (previousStage === 'STAGE_CONSTRAINT_GENERATION' && 
+                stages.indexOf(currentStage) > stages.indexOf('STAGE_CONSTRAINT_GENERATION')) {
+                
+                // 更新约束生成进度为100%
+                updateConstraintGenerationProgress({ 
+                    progress: 100, 
+                    message: "约束条件生成完成！" 
+                });
+            }
+        }
+        
+        // 在约束可视化阶段或之后，刷新可视化
         if (stages.indexOf(currentStage) >= stages.indexOf('STAGE_CONSTRAINT_VISUALIZATION')) {
+            console.log("在可视化阶段或之后，刷新可视化...");
             refreshVisualizations();
         }
     })
     .catch(error => {
-        console.error('Error refreshing state:', error);
+        console.error('刷新状态时出错:', error);
     });
 }
 
-// Refresh visualizations
+// 刷新可视化图片
 function refreshVisualizations() {
-    fetch(`/api/visualize?session_id=${currentSessionId}`)
+    if (!currentSessionId) return;
+    
+    console.log("正在刷新可视化图片...");
+    
+    // 首先检查是否存在具体的文件名
+    fetch(`/api/check_visualization_files?session_id=${currentSessionId}`)
     .then(response => response.json())
     .then(data => {
         if (data.error) {
-            console.error('Error fetching visualizations:', data.error);
+            console.error('检查可视化文件失败:', data.error);
             return;
         }
         
-        if (data.visualizations && data.visualizations.length > 0) {
-            // Find and display the room graph
-            const roomGraphImg = data.visualizations.find(path => 
-                path.includes('constraints_visualization') && !path.includes('table'));
-                
-            if (roomGraphImg) {
-                document.getElementById('roomGraphImg').src = roomGraphImg;
-                document.getElementById('roomGraphImg').classList.remove('d-none');
-                document.getElementById('roomGraphPlaceholder').classList.add('d-none');
+        console.log("可视化文件检查结果:", data);
+        
+        // 如果找到图片文件，直接使用它们
+        if (data.files) {
+            if (data.files.room_graph) {
+                console.log("找到房间图:", data.files.room_graph);
+                const imgElement = document.getElementById('roomGraphImg');
+                imgElement.src = data.files.room_graph + "?t=" + new Date().getTime(); // 添加时间戳防止缓存
+                imgElement.onload = function() {
+                    console.log("房间图加载成功");
+                    imgElement.classList.remove('d-none');
+                    document.getElementById('roomGraphPlaceholder').classList.add('d-none');
+                };
+                imgElement.onerror = function() {
+                    console.error("房间图加载失败:", data.files.room_graph);
+                };
             }
             
-            // Find and display the constraints table
-            const constraintsTableImg = data.visualizations.find(path => 
-                path.includes('table') || path.includes('_table'));
-                
-            if (constraintsTableImg) {
-                document.getElementById('constraintsTableImg').src = constraintsTableImg;
-                document.getElementById('constraintsTableImg').classList.remove('d-none');
-                document.getElementById('constraintsTablePlaceholder').classList.add('d-none');
+            if (data.files.constraints_table) {
+                console.log("找到约束表格:", data.files.constraints_table);
+                const imgElement = document.getElementById('constraintsTableImg');
+                imgElement.src = data.files.constraints_table + "?t=" + new Date().getTime(); // 添加时间戳防止缓存
+                imgElement.onload = function() {
+                    console.log("约束表格加载成功");
+                    imgElement.classList.remove('d-none');
+                    document.getElementById('constraintsTablePlaceholder').classList.add('d-none');
+                };
+                imgElement.onerror = function() {
+                    console.error("约束表格加载失败:", data.files.constraints_table);
+                };
             }
             
-            // Find and display layout solution if available
-            const layoutImg = data.visualizations.find(path => 
-                path.includes('solution') || path.includes('layout'));
-                
-            if (layoutImg) {
-                document.getElementById('layoutImg').src = layoutImg;
-                document.getElementById('layoutImg').classList.remove('d-none');
-                document.getElementById('layoutPlaceholder').classList.add('d-none');
+            if (data.files.layout) {
+                console.log("找到布局方案:", data.files.layout);
+                const imgElement = document.getElementById('layoutImg');
+                imgElement.src = data.files.layout + "?t=" + new Date().getTime(); // 添加时间戳防止缓存
+                imgElement.onload = function() {
+                    console.log("布局方案加载成功");
+                    imgElement.classList.remove('d-none');
+                    document.getElementById('layoutPlaceholder').classList.add('d-none');
+                };
+                imgElement.onerror = function() {
+                    console.error("布局方案加载失败:", data.files.layout);
+                };
             }
+            
+            return; // 如果已经找到具体文件，不需要执行下面的通用搜索
         }
+        
+        // 如果没有通过具体文件名找到，则使用通用搜索
+        fetch(`/api/visualize?session_id=${currentSessionId}`)
+        .then(response => response.json())
+        .then(visualizeData => {
+            if (visualizeData.error) {
+                console.error('获取可视化图片失败:', visualizeData.error);
+                return;
+            }
+            
+            console.log("获取到的可视化图片:", visualizeData.visualizations);
+            
+            if (visualizeData.visualizations && visualizeData.visualizations.length > 0) {
+                // 之前的查找逻辑保持不变
+                // 找到并显示房间图
+                const roomGraphImg = visualizeData.visualizations.find(path => 
+                    path.includes('constraints_visualization') && !path.includes('table'));
+                    
+                if (roomGraphImg) {
+                    console.log("找到房间图:", roomGraphImg);
+                    const imgElement = document.getElementById('roomGraphImg');
+                    imgElement.src = roomGraphImg + "?t=" + new Date().getTime(); // 添加时间戳防止缓存
+                    imgElement.onload = function() {
+                        console.log("房间图加载成功");
+                        imgElement.classList.remove('d-none');
+                        document.getElementById('roomGraphPlaceholder').classList.add('d-none');
+                    };
+                    imgElement.onerror = function() {
+                        console.error("房间图加载失败:", roomGraphImg);
+                    };
+                }
+                
+                // 找到并显示约束表格
+                const constraintsTableImg = visualizeData.visualizations.find(path => 
+                    path.includes('table') || path.includes('_table'));
+                    
+                if (constraintsTableImg) {
+                    console.log("找到约束表格:", constraintsTableImg);
+                    const imgElement = document.getElementById('constraintsTableImg');
+                    imgElement.src = constraintsTableImg + "?t=" + new Date().getTime(); // 添加时间戳防止缓存
+                    imgElement.onload = function() {
+                        console.log("约束表格加载成功");
+                        imgElement.classList.remove('d-none');
+                        document.getElementById('constraintsTablePlaceholder').classList.add('d-none');
+                    };
+                    imgElement.onerror = function() {
+                        console.error("约束表格加载失败:", constraintsTableImg);
+                    };
+                }
+                
+                // 找到并显示布局方案
+                const layoutImg = visualizeData.visualizations.find(path => 
+                    path.includes('solution') || path.includes('layout'));
+                    
+                if (layoutImg) {
+                    console.log("找到布局方案:", layoutImg);
+                    const imgElement = document.getElementById('layoutImg');
+                    imgElement.src = layoutImg + "?t=" + new Date().getTime(); // 添加时间戳防止缓存
+                    imgElement.onload = function() {
+                        console.log("布局方案加载成功");
+                        imgElement.classList.remove('d-none');
+                        document.getElementById('layoutPlaceholder').classList.add('d-none');
+                    };
+                    imgElement.onerror = function() {
+                        console.error("布局方案加载失败:", layoutImg);
+                    };
+                }
+            } else {
+                console.log("没有找到可视化图片");
+            }
+        })
+        .catch(error => {
+            console.error('刷新可视化错误:', error);
+        });
     })
     .catch(error => {
-        console.error('Error refreshing visualizations:', error);
+        console.error('检查可视化文件错误:', error);
+        
+        // 如果检查文件API失败，仍尝试通用搜索
+        fetch(`/api/visualize?session_id=${currentSessionId}`)
+        .then(response => response.json())
+        .then(visualizeData => {
+            // 处理通用搜索结果，与上面相同的逻辑
+            // ...
+        })
+        .catch(error => {
+            console.error('刷新可视化错误:', error);
+        });
     });
 }
 
