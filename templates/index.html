@@ -170,9 +170,21 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
+                    <div class="form-group mb-3">
+                        <label for="sessionPathSelect" class="form-label">Select a recent session</label>
+                        <select class="form-select" id="sessionPathSelect">
+                            <option value="" selected>Loading sessions...</option>
+                        </select>
+                    </div>
                     <div class="form-group">
-                        <label for="sessionPath">Session Path</label>
+                        <label for="sessionPath" class="form-label">Or enter session path manually</label>
                         <input type="text" class="form-control" id="sessionPath" placeholder="sessions/20240410_123456">
+                    </div>
+                    <div id="sessionLoadingSpinner" class="text-center mt-3 d-none">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading sessions...</span>
+                        </div>
+                        <p class="mt-2">Loading available sessions...</p>
                     </div>
                 </div>
                 <div class="modal-footer">

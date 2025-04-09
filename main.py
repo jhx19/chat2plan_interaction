@@ -3,9 +3,6 @@ import sys
 import json
 import argparse
 from dotenv import load_dotenv
-from models.spatial_understanding import SpatialUnderstanding
-from models.requirement_analysis import RequirementAnalysis
-from models.question_generation import QuestionGeneration
 from models.constraint_quantification import ConstraintQuantification
 from models.constraint_visualization import ConstraintVisualization
 from models.constraint_refinement import ConstraintRefinement
@@ -41,9 +38,6 @@ class ArchitectureAISystem:
         self.openai_client.set_session_manager(self.session_manager)
         
         # 初始化各功能模块
-        self.spatial_understanding = SpatialUnderstanding(self.openai_client)
-        self.requirement_analysis = RequirementAnalysis(self.openai_client)
-        self.question_generation = QuestionGeneration(self.openai_client)
         self.constraint_quantification = ConstraintQuantification(self.openai_client)
         
         # 初始化统一处理模块
@@ -342,7 +336,7 @@ class ArchitectureAISystem:
             self.workflow_manager.set_key_questions_status(resolved_questions, total_questions)
         
         # 获取下一个问题
-        next_question = result.get("next_question", "能否再详细描述一下您对这个建筑设计的期望和需求？")
+        next_question = result.get("next_question", "还有其他需求吗？")
         
         return next_question
     
@@ -366,7 +360,7 @@ class ArchitectureAISystem:
             else:
                 user_input = None
         else:
-            user_input = None
+            user_input = "继续对话"
         
         # 主交互循环
         while True:
@@ -400,32 +394,28 @@ class ArchitectureAISystem:
                 # 处理用户输入并获取回应
                 response = self.process_user_input(user_input)
                 user_input = None
-                
-                # 如果response是字典（包含question和explanation），则提取问题
-                if isinstance(response, dict) and "question" in response:
-                    question_text = response["question"]
-                    if question_text == "":
-                        # 检查是否所有关键问题已解决，可以进入约束条件量化阶段
-                        if self.workflow_manager.can_advance_to_constraint_generation():
-                            print("所有关键问题已解决，即将进入约束条件生成阶段...")
-                            self.workflow_manager.advance_to_next_stage()
-                            user_input = None
-                            continue
-                    # 输出系统回应
-                    print(f"系统: {question_text}")
-                else:
-                    # 向后兼容，处理response是字符串的情况
-                    print(f"系统: {response}")
-                
-                # 记录系统回应
                 self.session_manager.add_system_response(response)
-                
                 # 检查是否所有关键问题已解决，可以进入约束条件量化阶段
                 if self.workflow_manager.can_advance_to_constraint_generation():
                     print("所有关键问题已解决，即将进入约束条件生成阶段...")
                     self.workflow_manager.advance_to_next_stage()
                     user_input = None
                     continue
+
+                # 如果response是字典（包含question和explanation），则提取问题
+                if isinstance(response, dict) and "next_question" in response:
+                    question_text = response["next_question"]
+                    # 输出系统回应
+                    print(f"系统: {question_text}")
+                else:
+                    # 输出系统回应
+                    # 向后兼容，处理response是字符串的情况
+                    print(f"系统: {response}")
+                
+                # 记录系统回应
+                
+                user_input = None
+
             
             elif current_stage == self.workflow_manager.STAGE_CONSTRAINT_GENERATION:
                 # 约束条件生成阶段
