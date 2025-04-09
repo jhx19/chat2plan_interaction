@@ -7,7 +7,7 @@ import json
 # 添加项目根目录到Python路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import SOLUTION_REFINEMENT_PROMPT, CONSTRAINT_QUANTIFICATION_MODEL,BASE_PROMPT
+from config import SOLUTION_REFINEMENT_PROMPT, CONSTRAINT_QUANTIFICATION_MODEL, BASE_PROMPT
 
 class SolutionRefinement:
     """
@@ -34,18 +34,25 @@ class SolutionRefinement:
         
         Returns:
             dict: 优化后的约束条件（调整约束，而不是直接修改布局方案）
+            list: 约束条件变化对比
         """
+        # 保存原始约束条件，用于比较
+        original_constraints = json.loads(json.dumps(constraints))
+        
         # 如果未指定模型，使用约束量化模块的默认模型
         if not model_name:
             model_name = CONSTRAINT_QUANTIFICATION_MODEL
             
         # 读取约束条件基础提示词
         from config import BASE_PROMPT
-        
+            
         # 读取约束条件基础提示词
-        with open('templates/constraint_base_prompt.txt', 'r', encoding='utf-8') as f:
-            CONSTRAINT_BASE_PROMPT = f.read()
-
+        try:
+            with open('templates/constraint_base_prompt.txt', 'r', encoding='utf-8') as f:
+                CONSTRAINT_BASE_PROMPT = f.read()
+        except:
+            CONSTRAINT_BASE_PROMPT = ""
+            
         # 准备提示词
         prompt = SOLUTION_REFINEMENT_PROMPT.format(
             base_prompt=BASE_PROMPT,
@@ -65,7 +72,7 @@ class SolutionRefinement:
         
         # 如果API调用失败或返回为空，则返回原约束条件
         if not response:
-            return constraints
+            return constraints, None
         
         # 处理API返回的JSON响应
         try:
@@ -80,7 +87,7 @@ class SolutionRefinement:
             # 检查refined_constraints的格式是否符合预期
             if not self._validate_constraints(refined_constraints):
                 print("优化后的约束条件格式不符合预期，将使用原约束条件。")
-                return constraints
+                return constraints, None
             
             # 检查并验证可达性
             from utils.constraint_validator import ConstraintValidator
@@ -95,12 +102,17 @@ class SolutionRefinement:
             if path_modified or reachability_modified:
                 print("已添加流线空间(path)和入口(entrance)，并确保所有房间可达性。")
             
-            return refined_constraints
+            # 创建约束对比
+            from models.constraint_visualization import ConstraintVisualization
+            visualizer = ConstraintVisualization()
+            diff_table = visualizer.compare_constraints(original_constraints, refined_constraints)
+            
+            return refined_constraints, diff_table
         
         except (json.JSONDecodeError, TypeError) as e:
             print(f"解析优化后的约束条件时出错: {str(e)}")
-            return constraints
-         
+            return constraints, None
+    
     def _validate_constraints(self, constraints):
         """验证约束条件的格式是否符合预期
         
