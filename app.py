@@ -73,13 +73,52 @@ def start_session():
     
     return jsonify({'session_id': session_id})
 
+@app.route('/api/list_sessions', methods=['GET'])
+def list_sessions():
+    """List all available sessions in reverse chronological order (newest first)"""
+    sessions_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sessions')
+    
+    if not os.path.exists(sessions_dir):
+        return jsonify({'sessions': []})
+    
+    # Get all session directories
+    session_dirs = []
+    for item in os.listdir(sessions_dir):
+        item_path = os.path.join(sessions_dir, item)
+        if os.path.isdir(item_path):
+            # Check if it contains session_record.json to confirm it's a valid session
+            if os.path.exists(os.path.join(item_path, 'session_record.json')):
+                # Get directory creation time for sorting
+                try:
+                    creation_time = os.path.getctime(item_path)
+                    session_dirs.append((item, creation_time))
+                except:
+                    # If can't get creation time, use 0 (will be at the end)
+                    session_dirs.append((item, 0))
+    
+    # Sort by creation time (newest first)
+    session_dirs.sort(key=lambda x: x[1], reverse=True)
+    
+    # Return just the directory names
+    return jsonify({'sessions': [s[0] for s in session_dirs]})
+
 @app.route('/api/resume', methods=['POST'])
 def resume_session():
     data = request.json
     session_path = data.get('session_path')
     
-    if not session_path or not os.path.exists(session_path):
-        return jsonify({'error': 'Invalid session path'}), 400
+    if not session_path:
+        return jsonify({'error': 'Session path is required'}), 400
+    
+    # Convert relative path to full path if needed
+    if not os.path.isabs(session_path):
+        sessions_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sessions')
+        full_path = os.path.join(sessions_dir, session_path)
+    else:
+        full_path = session_path
+    
+    if not os.path.exists(full_path):
+        return jsonify({'error': f'Session path not found: {full_path}'}), 400
     
     session_id = str(uuid.uuid4())
     
@@ -95,7 +134,7 @@ def resume_session():
         
         try:
             # Initialize the system with resumed session
-            system = ArchitectureAISystem(resume_session_path=session_path)
+            system = ArchitectureAISystem(resume_session_path=full_path)
             sessions[session_id] = system
             
             # Signal that initialization is complete
@@ -265,7 +304,30 @@ def chat():
             if new_stage == system.workflow_manager.STAGE_CONSTRAINT_GENERATION:
                 # Launch constraint generation in a background thread
                 def generate_constraints():
+                    # Report progress via stdout (which is captured by OutputCapture)
+                    print("Starting constraint generation process...")
+                    
+                    # Generate constraints
                     system.finalize_constraints()
+                    
+                    print("Constraint generation complete! Moving to visualization stage...")
+                    
+                    # Move to visualization stage
+                    system.workflow_manager.advance_to_next_stage()
+                    
+                    # Visualization will happen automatically in the next stage
+                    print("Generating constraint visualizations...")
+                    
+                    # We need to explicitly call visualization here since the main loop won't do it
+                    output_dir = os.path.join(system.session_manager.get_session_dir(), "constraints_visualization.png")
+                    system.constraint_visualization.visualize_constraints(
+                        system.constraints_all,
+                        output_path=output_dir
+                    )
+                    
+                    print("Visualization complete! Ready for refinement stage.")
+                    
+                    # Advance to refinement stage
                     system.workflow_manager.advance_to_next_stage()
                 
                 threading.Thread(target=generate_constraints, daemon=True).start()
@@ -274,11 +336,20 @@ def chat():
             elif new_stage == system.workflow_manager.STAGE_SOLUTION_GENERATION:
                 # Launch solution generation in a background thread
                 def generate_solution():
+                    print("Starting solution generation process...")
+                    
+                    # Generate solution
                     system.current_solution = system.call_solver(system.constraints_all)
+                    
+                    # Record solution
                     system.session_manager.add_intermediate_state(
                         f"solution_generation_{system.workflow_manager.current_iteration}",
                         {"solution": system.current_solution}
                     )
+                    
+                    print("Solution generation complete! Moving to refinement stage...")
+                    
+                    # Move to refinement stage
                     system.workflow_manager.advance_to_next_stage()
                 
                 threading.Thread(target=generate_solution, daemon=True).start()
@@ -298,12 +369,38 @@ def get_state():
     system = sessions[session_id]
     current_stage = system.workflow_manager.get_current_stage()
     
+    # Check for constraint generation progress (simulated in this example)
+    constraint_progress = None
+    if current_stage == system.workflow_manager.STAGE_CONSTRAINT_GENERATION:
+        # For now, we'll simulate progress. In a real implementation,
+        # you'd need to track this in your main system logic.
+        output_queue = output_queues.get(session_id)
+        if output_queue and not output_queue.empty():
+            # Check if there's any output about generation progress
+            try:
+                while not output_queue.empty():
+                    message = output_queue.get_nowait()
+                    if "generating" in message.lower() or "processing" in message.lower():
+                        constraint_progress = {
+                            'message': message,
+                            'progress': 50  # Simulate 50% progress
+                        }
+            except:
+                pass
+    
+    # Determine if all key questions are known
+    all_key_questions_known = False
+    if system.key_questions:
+        all_key_questions_known = all(q.get('status') == '已知' for q in system.key_questions)
+    
     return jsonify({
         'current_stage': current_stage,
         'stage_description': system.workflow_manager.get_stage_description(),
         'user_requirement_guess': system.user_requirement_guess,
         'spatial_understanding_record': system.spatial_understanding_record,
-        'key_questions': system.key_questions
+        'key_questions': system.key_questions,
+        'all_key_questions_known': all_key_questions_known,
+        'constraint_progress': constraint_progress
     })
 
 @app.route('/api/visualize', methods=['GET'])

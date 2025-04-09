@@ -70,6 +70,57 @@ function updateProgressBar() {
         const progressPercent = (stageIndex + 1) / stages.length * 100;
         progressBar.style.width = `${progressPercent}%`;
         progressBar.setAttribute('data-label', `${stageDisplayNames[currentStage]} (${stageIndex + 1}/${stages.length})`);
+        
+        // Update progress bar color based on stage
+        progressBar.className = 'progress-bar';
+        
+        // Different colors for different stages
+        if (currentStage === 'STAGE_REQUIREMENT_GATHERING') {
+            progressBar.classList.add('bg-primary'); // Blue
+        } else if (currentStage === 'STAGE_CONSTRAINT_GENERATION') {
+            progressBar.classList.add('bg-info'); // Light blue
+        } else if (currentStage === 'STAGE_CONSTRAINT_VISUALIZATION') {
+            progressBar.classList.add('bg-success'); // Green
+        } else if (currentStage === 'STAGE_CONSTRAINT_REFINEMENT') {
+            progressBar.classList.add('bg-warning'); // Yellow
+        } else if (currentStage === 'STAGE_SOLUTION_GENERATION') {
+            progressBar.classList.add('bg-danger'); // Red
+        } else if (currentStage === 'STAGE_SOLUTION_REFINEMENT') {
+            progressBar.classList.add('bg-info'); // Light blue
+        }
+        
+        // Add stage indicators below progress bar if they don't exist
+        const stageIndicatorsContainer = document.querySelector('.stage-indicators');
+        if (!stageIndicatorsContainer) {
+            const container = document.createElement('div');
+            container.className = 'stage-indicators d-flex justify-content-between mt-2';
+            
+            // Add an indicator for each stage
+            stages.forEach((stage, index) => {
+                const indicator = document.createElement('span');
+                indicator.className = 'stage-indicator-dot';
+                indicator.setAttribute('data-stage', stage);
+                indicator.setAttribute('title', stageDisplayNames[stage]);
+                
+                // Add tooltip using Bootstrap
+                new bootstrap.Tooltip(indicator);
+                
+                container.appendChild(indicator);
+            });
+            
+            // Add the indicators after the progress bar
+            const progressContainer = document.querySelector('.progress');
+            progressContainer.parentNode.insertBefore(container, progressContainer.nextSibling);
+        }
+        
+        // Update the active stage indicator
+        document.querySelectorAll('.stage-indicator-dot').forEach((dot, index) => {
+            if (index <= stageIndex) {
+                dot.classList.add('active');
+            } else {
+                dot.classList.remove('active');
+            }
+        });
     }
 }
 
@@ -100,15 +151,77 @@ function startNewSession() {
 
 // Show the resume session modal
 function showResumeModal() {
+    // Show loading spinner
+    document.getElementById('sessionLoadingSpinner').classList.remove('d-none');
+    
+    // Load available sessions from the backend
+    fetch('/api/list_sessions')
+        .then(response => response.json())
+        .then(data => {
+            const selectElement = document.getElementById('sessionPathSelect');
+            
+            // Clear existing options
+            selectElement.innerHTML = '';
+            
+            if (data.sessions && data.sessions.length > 0) {
+                // Add a default/prompt option
+                const defaultOption = document.createElement('option');
+                defaultOption.value = '';
+                defaultOption.textContent = 'Select a session...';
+                selectElement.appendChild(defaultOption);
+                
+                // Add options for each session
+                data.sessions.forEach(session => {
+                    const option = document.createElement('option');
+                    option.value = session;
+                    option.textContent = session;
+                    selectElement.appendChild(option);
+                });
+            } else {
+                // No sessions found
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = 'No sessions found';
+                selectElement.appendChild(option);
+            }
+            
+            // Hide loading spinner
+            document.getElementById('sessionLoadingSpinner').classList.add('d-none');
+        })
+        .catch(error => {
+            console.error('Error loading sessions:', error);
+            
+            // Update dropdown with error message
+            const selectElement = document.getElementById('sessionPathSelect');
+            selectElement.innerHTML = '<option value="">Error loading sessions</option>';
+            
+            // Hide loading spinner
+            document.getElementById('sessionLoadingSpinner').classList.add('d-none');
+        });
+    
+    // Show the modal
     const modal = new bootstrap.Modal(document.getElementById('resumeSessionModal'));
     modal.show();
+    
+    // Set up session path select dropdown to update text input
+    document.getElementById('sessionPathSelect').addEventListener('change', function() {
+        const selectedValue = this.value;
+        if (selectedValue) {
+            document.getElementById('sessionPath').value = selectedValue;
+        }
+    });
 }
 
 // Resume an existing session
 function resumeSession() {
-    const sessionPath = document.getElementById('sessionPath').value;
+    // Try dropdown first, then fall back to text input
+    let sessionPath = document.getElementById('sessionPathSelect').value;
     if (!sessionPath) {
-        alert('Please enter a session path');
+        sessionPath = document.getElementById('sessionPath').value;
+    }
+    
+    if (!sessionPath) {
+        alert('Please select or enter a session path');
         return;
     }
     
@@ -279,10 +392,51 @@ function refreshState() {
             return;
         }
         
-        // Update current stage
+        // Check if stage changed
+        const previousStage = currentStage;
         currentStage = data.current_stage;
+        const stageChanged = previousStage !== currentStage;
+        
+        // Update stage description and progress bar
         document.getElementById('stageDescription').textContent = data.stage_description;
         updateProgressBar();
+        
+        // If stage changed, show a notification
+        if (stageChanged && previousStage) {
+            addSystemMessage(`Stage changed from ${stageDisplayNames[previousStage]} to ${stageDisplayNames[currentStage]}`);
+            
+            // If we just entered constraint generation stage
+            if (currentStage === 'STAGE_CONSTRAINT_GENERATION') {
+                updateConstraintGenerationProgress({ progress: 10, message: "Starting constraint generation..." });
+            } 
+            // If we just moved past constraint generation
+            else if (previousStage === 'STAGE_CONSTRAINT_GENERATION' && 
+                     stages.indexOf(currentStage) > stages.indexOf('STAGE_CONSTRAINT_GENERATION')) {
+                // Update the progress to 100% complete
+                const progressElement = updateConstraintGenerationProgress({ 
+                    progress: 100, 
+                    message: "Constraint generation complete!" 
+                });
+                
+                // After a delay, refresh visualizations
+                setTimeout(() => {
+                    refreshVisualizations();
+                }, 1000);
+            }
+        }
+        
+        // Handle constraint generation progress
+        if (currentStage === 'STAGE_CONSTRAINT_GENERATION') {
+            if (data.constraint_progress) {
+                updateConstraintGenerationProgress(data.constraint_progress);
+            } else {
+                // If no specific progress data, just update with a simulated value
+                updateConstraintGenerationProgress({ 
+                    progress: Math.floor(Math.random() * 40) + 30, // Between 30% and 70%
+                    message: "Generating constraints..."
+                });
+            }
+        }
         
         // Update user requirement guess
         document.getElementById('userRequirementText').innerHTML = 
@@ -296,7 +450,13 @@ function refreshState() {
         const keyQuestionsTable = document.getElementById('keyQuestionsTable');
         keyQuestionsTable.innerHTML = '';
         
+        // Count known questions to check if all are known
+        let knownQuestions = 0;
+        let totalQuestions = 0;
+        
         if (data.key_questions && data.key_questions.length > 0) {
+            totalQuestions = data.key_questions.length;
+            
             data.key_questions.forEach(question => {
                 const row = document.createElement('tr');
                 
@@ -307,6 +467,9 @@ function refreshState() {
                 const statusCell = document.createElement('td');
                 statusCell.textContent = question.status;
                 statusCell.className = question.status === '已知' ? 'status-known' : 'status-unknown';
+                if (question.status === '已知') {
+                    knownQuestions++;
+                }
                 row.appendChild(statusCell);
                 
                 const detailsCell = document.createElement('td');
@@ -315,6 +478,19 @@ function refreshState() {
                 
                 keyQuestionsTable.appendChild(row);
             });
+        }
+        
+        // Check if all questions are known (using either our count or the backend flag)
+        const allQuestionsKnown = data.all_key_questions_known || 
+                                (totalQuestions > 0 && knownQuestions === totalQuestions);
+        
+        // If all questions are known and we're still in requirement gathering stage
+        if (allQuestionsKnown && currentStage === 'STAGE_REQUIREMENT_GATHERING') {
+            // Add message to indicate we're moving to next stage
+            addSystemMessage("All key questions have been answered! Moving to constraint generation stage...");
+            
+            // Automatically skip to next stage
+            skipStage();
         }
         
         // Refresh visualizations if we're past the constraint generation stage
@@ -428,6 +604,61 @@ function formatTextWithLineBreaks(text) {
     return text.replace(/\n/g, '<br>');
 }
 
+// Add a constraint generation progress indicator to the chat
+function updateConstraintGenerationProgress(progress) {
+    // Check if progress indicator already exists
+    let progressElement = document.querySelector('.constraint-generation-progress');
+    
+    if (!progressElement) {
+        // Create new progress indicator
+        progressElement = document.createElement('div');
+        progressElement.className = 'constraint-generation-progress system-message';
+        progressElement.innerHTML = `
+            <strong>Generating constraints...</strong>
+            <div class="progress">
+                <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" 
+                     style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            <div class="constraint-generation-status">Initializing...</div>
+        `;
+        
+        // Add to chat history
+        const chatHistory = document.getElementById('chatHistory');
+        chatHistory.appendChild(progressElement);
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+    
+    // Update progress percentage
+    const progressBar = progressElement.querySelector('.progress-bar');
+    let percentComplete = 0;
+    
+    if (progress) {
+        if (typeof progress === 'number') {
+            percentComplete = progress;
+        } else if (progress.progress) {
+            percentComplete = progress.progress;
+        }
+        
+        // Update status message if provided
+        if (progress.message) {
+            progressElement.querySelector('.constraint-generation-status').textContent = progress.message;
+        }
+    }
+    
+    // Ensure we're showing at least some progress in constraint generation stage
+    if (percentComplete === 0 && currentStage === 'STAGE_CONSTRAINT_GENERATION') {
+        // Simulate progress if none provided
+        const fakeProgress = Math.floor(Math.random() * 30) + 10; // Between 10 and 40%
+        progressBar.style.width = `${fakeProgress}%`;
+        progressBar.setAttribute('aria-valuenow', fakeProgress);
+    } else {
+        progressBar.style.width = `${percentComplete}%`;
+        progressBar.setAttribute('aria-valuenow', percentComplete);
+    }
+    
+    return progressElement;
+}
+
 // Poll for state changes when in certain stages
 function pollForStateChanges() {
     if (!currentSessionId) return;
@@ -440,14 +671,26 @@ function pollForStateChanges() {
     
     if (pollingStages.includes(currentStage)) {
         refreshState();
+        
+        // Add or update constraint generation progress
+        if (currentStage === 'STAGE_CONSTRAINT_GENERATION') {
+            updateConstraintGenerationProgress();
+        }
+        
         // Continue polling every 2 seconds
         setTimeout(pollForStateChanges, 2000);
     }
 }
 
-// Initialize periodic state refresh
+// Initialize periodic state refresh with varied frequencies
 setInterval(() => {
     if (currentSessionId) {
         refreshState();
+        
+        // If in constraint generation or solution generation, poll more frequently
+        if (currentStage === 'STAGE_CONSTRAINT_GENERATION' || 
+            currentStage === 'STAGE_SOLUTION_GENERATION') {
+            pollForStateChanges();
+        }
     }
-}, 5000); // Refresh every 5 seconds
+}, 5000); // Regular refresh every 5 seconds
