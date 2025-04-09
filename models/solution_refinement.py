@@ -39,9 +39,17 @@ class SolutionRefinement:
         if not model_name:
             model_name = CONSTRAINT_QUANTIFICATION_MODEL
             
+        # 读取约束条件基础提示词
+        from config import BASE_PROMPT
+        
+        # 读取约束条件基础提示词
+        with open('templates/constraint_base_prompt.txt', 'r', encoding='utf-8') as f:
+            CONSTRAINT_BASE_PROMPT = f.read()
+
         # 准备提示词
         prompt = SOLUTION_REFINEMENT_PROMPT.format(
             base_prompt=BASE_PROMPT,
+            constraint_base_prompt=CONSTRAINT_BASE_PROMPT,
             current_constraints=json.dumps(constraints, ensure_ascii=False, indent=2),
             current_solution=json.dumps(current_solution, ensure_ascii=False, indent=2),
             user_feedback=user_feedback,
@@ -74,12 +82,25 @@ class SolutionRefinement:
                 print("优化后的约束条件格式不符合预期，将使用原约束条件。")
                 return constraints
             
+            # 检查并验证可达性
+            from utils.constraint_validator import ConstraintValidator
+            validator = ConstraintValidator()
+            
+            # 确保约束中包含path和entrance
+            refined_constraints, path_modified = validator.validate_and_add_path_entrance(refined_constraints)
+            
+            # 检查所有房间的可达性，添加必要的path连接
+            refined_constraints, reachability_modified = validator.validate_connectivity(refined_constraints)
+            
+            if path_modified or reachability_modified:
+                print("已添加流线空间(path)和入口(entrance)，并确保所有房间可达性。")
+            
             return refined_constraints
         
         except (json.JSONDecodeError, TypeError) as e:
             print(f"解析优化后的约束条件时出错: {str(e)}")
             return constraints
-    
+         
     def _validate_constraints(self, constraints):
         """验证约束条件的格式是否符合预期
         

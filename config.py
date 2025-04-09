@@ -186,40 +186,6 @@ QUESTION_GENERATION_PROMPT = """
 }}
 """
 
-# 提示词设置 - 约束条件量化模块
-CONSTRAINT_QUANTIFICATION_PROMPT = """
-{base_prompt}\n\n你的当前任务是将用户需求转化为量化的约束条件。
-请根据用户需求猜测和空间理解记录，生成符合JSON模板的约束条件。
-
-用户需求猜测：
-{user_requirement_guess}
-
-空间理解记录：
-{spatial_understanding}
-
-约束条件模板：
-{constraint_template}
-
-请完成以下任务：
-1. 分析用户需求猜测，提取所有可量化的需求。
-2. 将需求转化为JSON格式的约束条件，严格遵循提供的模板结构。
-3. 为未明确提及但设计中必要的部分，根据建筑设计常识补充合理的默认值。
-4. 为每类约束条件分配合理的权重（0.0-1.0），反映其在用户需求中的重要性，无特殊依据的部分可以设置常规权重。
-5. 检测约束条件之间的潜在冲突，确保约束条件的一致性和合理性。
-
-生成的约束条件应完整、精确，并适合直接输入到布局求解器中。
-
-请以JSON格式返回结果，格式如下：
-{{
-  "constraints": {{
-    "hard_constraints": {{
-      }},
-    "soft_constraints": {{
-      }},
-    // 生成的约束条件，严格遵循提供的模板结构
-  }}
-}}
-"""
 
 # 提示词设置 - 优化rooms格式约束条件
 CONSTRAINT_ROOMS_OPTIMIZATION_PROMPT = """
@@ -273,33 +239,62 @@ CHECK_QUESTION_ANSWERED_PROMPT = """
 }}
 """
 
-# 约束条件转换提示词
-CONSTRAINT_CONVERTER_PROMPT = """
-{base_prompt}\n\n你的当前任务是在不同格式的约束条件之间进行转换。
+# 更新约束条件相关的提示词，集成constraint_base_prompt
 
-请将以下all格式的约束条件转换为rooms格式：
+# 更新约束条件量化提示词
+CONSTRAINT_QUANTIFICATION_PROMPT = """
 
-all格式约束条件：
-{constraints_all}
+{base_prompt}
 
-转换后的rooms格式应遵循以下模板：
-{template_rooms}
+你的当前任务是将用户需求转化为量化的约束条件。
+请根据用户需求猜测和空间理解记录，生成符合JSON模板的约束条件。
 
-请确保转换过程中不丢失任何信息，并保持约束条件的完整性和一致性。
+{constraint_base_prompt}
+
+用户需求猜测：
+{user_requirement_guess}
+
+空间理解记录：
+{spatial_understanding}
+
+约束条件模板：
+{constraint_template}
+
+请完成以下任务：
+1. 分析用户需求猜测，提取所有可量化的需求。
+2. 将需求转化为JSON格式的约束条件，严格遵循提供的模板结构。
+3. 为未明确提及但设计中必要的部分，根据建筑设计常识补充合理的默认值。
+4. 为每类约束条件分配合理的权重（0.0-1.0），反映其在用户需求中的重要性，无特殊依据的部分可以设置常规权重。
+5. 检测约束条件之间的潜在冲突，确保约束条件的一致性和合理性。
+6. 添加path和entrance作为特殊空间，并确保所有房间可从entrance通过path到达。
+7. 适当添加adjacency约束，表示空间相邻但不直接连通的房间对。
+
+生成的约束条件应完整、精确，并适合直接输入到布局求解器中。
 
 请以JSON格式返回结果，格式如下：
 {{
-  "rooms_constraints": {{
-    // 转换后的rooms格式约束条件
+  "constraints": {{
+    "hard_constraints": {{
+      // 房间列表等硬约束
+    }},
+    "soft_constraints": {{
+      // 各类软约束
+    }},
+    "special_spaces": {{
+      "path": true,
+      "entrance": true
+    }}
   }}
 }}
 """
 
-# Add these lines to config.py
-
-# 添加约束条件优化提示词
+# 更新约束条件优化提示词
 CONSTRAINT_REFINEMENT_PROMPT = """
-{base_prompt}\n\n你的当前任务是根据用户反馈，优化现有的约束条件。
+{base_prompt}
+
+你的当前任务是根据用户反馈，优化现有的约束条件。
+
+{constraint_base_prompt}
 
 当前约束条件：
 {current_constraints}
@@ -316,30 +311,40 @@ CONSTRAINT_REFINEMENT_PROMPT = """
    - 添加或删除房间
    - 修改房间面积、朝向、连接关系等
    - 调整约束条件权重
+   - 调整connection和adjacency关系
 3. 确保修改后的约束条件仍然符合JSON模板格式。
 4. 检查修改后的约束条件是否存在矛盾或不合理之处。
+5. 确保所有房间都能从entrance通过path到达。
 
 在优化过程中：
 1. 只修改用户明确提出需要调整的部分，保持其他部分不变。
 2. 如果用户反馈含糊不清，可以根据建筑设计常识进行合理推测。
 3. 确保优化后的约束条件仍然满足基本建筑设计原则。
+4. 保持path和entrance作为特殊空间，不要将它们添加到房间列表中。
 
 请以JSON格式返回优化后的约束条件，格式如下：
 {{
   "refined_constraints": {{
     "hard_constraints": {{
-      }},
+      // 房间列表等硬约束
+    }},
     "soft_constraints": {{
-      }},
-    // 优化后的约束条件，严格遵循原有结构
+      // 各类软约束
+    }},
+    "special_spaces": {{
+      "path": true,
+      "entrance": true
+    }}
   }}
 }}
 """
 
-# 添加布局方案优化提示词
+# 更新布局方案优化提示词
 SOLUTION_REFINEMENT_PROMPT = """
-{base_prompt}\n\n你的当前任务是根据用户对布局方案的反馈，优化约束条件以生成更满意的方案。
+{base_prompt}
 
+你的当前任务是根据用户对布局方案的反馈，优化约束条件以生成更满意的方案。
+{constraint_base_prompt}
 当前约束条件：
 {current_constraints}
 
@@ -357,24 +362,31 @@ SOLUTION_REFINEMENT_PROMPT = """
 2. 根据用户反馈调整相应的约束条件，包括但不限于：
    - 修改房间面积、朝向、连接关系等
    - 调整约束条件权重
-   - 添加新的排斥或连接关系
+   - 添加新的connection、adjacency或repulsion关系
 3. 确保修改后的约束条件仍然符合JSON模板格式。
 4. 检查修改后的约束条件是否存在矛盾或不合理之处。
+5. 确保所有房间都能从entrance通过path到达。
 
 在优化过程中：
 1. 只修改约束条件，不直接修改布局方案。
 2. 根据用户对布局方案的反馈，推断出需要调整的约束条件。
 3. 如果用户反馈含糊不清，可以根据建筑设计常识进行合理推测。
 4. 确保优化后的约束条件仍然满足基本建筑设计原则。
+5. 保持path和entrance作为特殊空间，不要将它们添加到房间列表中。
 
 请以JSON格式返回优化后的约束条件，格式如下：
 {{
   "refined_constraints": {{
     "hard_constraints": {{
-      }},
+      // 房间列表等硬约束
+    }},
     "soft_constraints": {{
-      }},
-    // 优化后的约束条件，严格遵循原有结构
+      // 各类软约束
+    }},
+    "special_spaces": {{
+      "path": true,
+      "entrance": true
+    }}
   }}
 }}
 """

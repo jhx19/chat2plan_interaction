@@ -1,8 +1,10 @@
 {
   "rooms": {
     "living_room": {  // room name
-      "connection": [],  // connection requirements to other rooms, can be empty, format:
+      "connection": [],  // connection requirements to other rooms (directly connected), can be empty, format:
                           // ["bedroom", "kitchen"]
+      "adjacency": [],   // adjacency requirements to other rooms (adjacent but not directly connected), can be empty, format:
+                          // ["study", "dining_room"]
       "area": {},  // area requirements, can be empty, format:
                     // {"min": 20, "max": 30}
       "orientation": "",  // orientation requirements, can be empty, format:
@@ -16,5 +18,9 @@
                         // ["master_bedroom_bathroom"]
     }
     // add more rooms as needed, e.g. "kitchen", "bedroom2"
+  },
+  "special_spaces": {
+    "path": true,       // Whether to use a path space for circulation, you don't need to change.
+    "entrance": true    // Whether to include an entrance point, you don't need to change.
   }
 }

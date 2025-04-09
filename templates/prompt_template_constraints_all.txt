@@ -4,11 +4,17 @@
   }, 
 
   "soft_constraints": {
-    "connection": {  // Connection relationship constraints
+    "connection": {  // Connection relationship constraints (directly connected rooms)
       "weight": 0.0,  // Overall weight for this constraint category, range: [0.0, 1.0], represents importance
       "constraints": []  // Specific connection requirements between room pairs, format:
                         // {"room pair": [room1, room2], "room_weight": 0.8}
                         // room_weight represents the specific importance of this connection, range: [0.0, 1.0]
+    },
+    "adjacency": {  // Adjacency relationship constraints (rooms adjacent but not directly connected)
+      "weight": 0.0,  // Overall weight for this constraint category, range: [0.0, 1.0]
+      "constraints": []  // Specific adjacency requirements between room pairs, format:
+                        // {"room pair": [room1, room2], "room_weight": 0.6}
+                        // room_weight represents the specific importance of this adjacency, range: [0.0, 1.0]
     },
     "area": {  // Area range constraints
       "weight": 0.0,  // Overall weight for this constraint category, range: [0.0, 1.0]
@@ -40,5 +46,10 @@
                         // {"room1": "bedroom1", "room2": "bathroom", "min_distance": 3, "room_weight": 0.6}
                         // min_distance is minimum Euclidean distance (unit: meters), room_weight is importance
     }
+  },
+  
+  "special_spaces": {
+    "path": true,       // Whether to use a path space for circulation, you don't need to change.
+    "entrance": true    // Whether to include an entrance point, you don't need to change.
   }
 }

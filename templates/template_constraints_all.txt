@@ -7,6 +7,10 @@
       "weight": 0.0,
       "constraints": []
     },
+    "adjacency": {
+      "weight": 0.0,
+      "constraints": []
+    },
     "area": {
       "weight": 0.0,
       "constraints": []
@@ -27,5 +31,9 @@
       "weight": 0.0,
       "constraints": []
     }
+  },
+  "special_spaces": {
+    "path": true,
+    "entrance": true
   }
-} 
+}
