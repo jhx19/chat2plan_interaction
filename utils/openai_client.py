@@ -30,6 +30,29 @@ class OpenAIClient:
         
         # 缓存获取的访问令牌
         self.access_tokens = {}
+        
+        # 记录token使用量
+        self.session_manager = None
+    
+    def set_session_manager(self, session_manager):
+        """设置会话记录管理器
+        
+        Args:
+            session_manager: SessionManager实例
+        """
+        self.session_manager = session_manager
+    
+    def _record_api_call(self, model_name, prompt, response, tokens_used):
+        """记录API调用信息
+        
+        Args:
+            model_name (str): 使用的模型名称
+            prompt (str): 发送的提示词
+            response (str): 收到的回应
+            tokens_used (dict): 使用的token数量
+        """
+        if self.session_manager:
+            self.session_manager.add_api_call(model_name, prompt, response, tokens_used)
     
     def _check_api_keys(self):
         """检查环境变量中的API密钥"""
@@ -71,7 +94,7 @@ class OpenAIClient:
             max_tokens (int, optional): 最大生成令牌数。如果为None，则使用配置中的默认值。
         
         Returns:
-            str: 生成的文本
+            str: 生成的文本，以JSON格式返回
         """
         # 如果未指定模型，使用默认的OpenAI模型
         if not model_name:
@@ -127,27 +150,112 @@ class OpenAIClient:
         Returns:
             str: 生成的文本
         """
-        # 设置自定义的API基础URL（如果有）
+        # 设置自定义的API基础URL和API密钥
         base_url = model_config.get("base_url")
-        if base_url and base_url != "https://api.openai.com/v1":
+        api_key = os.environ.get(model_config.get("api_key_env", "OPENAI_API_KEY"), "")
+        
+        # 创建新的客户端实例（如果需要）
+        if base_url and base_url != "https://api.openai.com/v1" or api_key != os.environ.get("OPENAI_API_KEY", ""):
             client = openai.OpenAI(
-                api_key=os.environ.get(model_config.get("api_key_env", "OPENAI_API_KEY"), ""),
+                api_key=api_key,
                 base_url=base_url
             )
         else:
             client = self.openai_client
         
-        response = client.chat.completions.create(
-            model=model_config.get("model", "gpt-3.5-turbo"),
-            messages=[
-                {"role": "system", "content": "你是一个专业的建筑设计师助手，帮助用户设计建筑布局。你的回答应该基于专业知识，并考虑用户的个性化需求。"},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
+        # 添加重试逻辑
+        max_retries = 3
+        retry_delay = 2
         
-        return response.choices[0].message.content
+        # 导入配置参数，用于控制是否强制输出JSON格式
+        from config import FORCE_JSON_OUTPUT, RESPONSE_FORMAT
+        
+        for attempt in range(max_retries):
+            try:
+                # 创建API调用参数
+                api_params = {
+                    "model": model_config.get("model", "gpt-3.5-turbo"),
+                    "messages": [
+                        {"role": "system", "content": "你是一个专业的建筑设计师助手，帮助用户设计建筑布局。你的回答应该基于专业知识，并考虑用户的个性化需求。"},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "stream": True  # 启用流式输出
+                }
+                
+                # 如果需要强制输出JSON格式
+                # if FORCE_JSON_OUTPUT:
+                #     api_params["response_format"] = {"type": RESPONSE_FORMAT}
+                #     # 注意：启用流式输出时，JSON格式可能需要特殊处理
+                #     api_params["stream"] = False  # JSON格式时禁用流式输出
+                
+                # 根据是否启用流式输出选择不同的处理方式
+                if api_params.get("stream", False):
+                    # 流式输出处理
+                    full_content = ""
+                    print("\n系统: ", end="", flush=True)  # 开始输出标记
+                    
+                    # 创建流式响应
+                    stream_resp = client.chat.completions.create(**api_params)
+                    
+                    # 逐块处理并输出响应
+                    for chunk in stream_resp:
+                        if chunk.choices and len(chunk.choices) > 0:
+                            delta = chunk.choices[0].delta
+                            if hasattr(delta, 'content') and delta.content:
+                                content_chunk = delta.content
+                                print(content_chunk, end="", flush=True)  # 实时输出到终端
+                                full_content += content_chunk
+                    
+                    print()  # 输出完成后换行
+                    content = full_content
+                else:
+                    # 非流式输出处理
+                    response = client.chat.completions.create(**api_params)
+                    content = response.choices[0].message.content
+                
+                # 计算token使用量（流式输出时可能需要额外处理）
+                if not api_params.get("stream", False):
+                    tokens_used = {
+                        "prompt": response.usage.prompt_tokens,
+                        "completion": response.usage.completion_tokens,
+                        "total": response.usage.total_tokens
+                    }
+                else:
+                    # 流式输出时无法直接获取token使用量，使用估算值
+                    # 这里使用简单估算，实际项目中可能需要更精确的计算方法
+                    tokens_used = {
+                        "prompt": len(prompt) // 4,  # 粗略估算
+                        "completion": len(content) // 4,  # 粗略估算
+                        "total": (len(prompt) + len(content)) // 4  # 粗略估算
+                    }
+                
+                # 记录API调用信息
+                model_name = model_config.get("model", "gpt-3.5-turbo")
+                self._record_api_call(model_name, prompt, content, tokens_used)
+                
+                # 清理响应中可能存在的Markdown代码块标记
+                if content.startswith('```'):
+                    # 查找第一个代码块的结束位置
+                    first_block_end = content.find('```', 3)
+                    if first_block_end != -1:
+                        # 提取代码块内容（去除语言标识符）
+                        lang_end = content.find('\n', 3)
+                        if lang_end != -1 and lang_end < first_block_end:
+                            content = content[lang_end+1:first_block_end].strip()
+                        else:
+                            content = content[3:first_block_end].strip()
+                
+                return content
+                
+            except Exception as e:
+                if "rate_limit" in str(e).lower() and attempt < max_retries - 1:
+                    wait_time = retry_delay * (2 ** attempt)  # 指数退避
+                    print(f"达到API速率限制，等待{wait_time}秒后重试...")
+                    time.sleep(wait_time)
+                    continue
+                raise  # 重新抛出其他类型的异常
     
     def _call_anthropic_api(self, prompt, model_config, temperature, max_tokens):
         """调用Anthropic API
@@ -231,5 +339,5 @@ class OpenAIClient:
             else:
                 raise Exception(f"智谱AI API返回错误: {result}")
         else:
-            raise Exception(f"智谱AI API错误: {response.status_code}, {response.text}") 
+            raise Exception(f"智谱AI API错误: {response.status_code}, {response.text}")
         

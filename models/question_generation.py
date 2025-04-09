@@ -7,7 +7,7 @@ import json
 # 添加项目根目录到Python路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import QUESTION_GENERATION_PROMPT, QUESTION_GENERATION_TEMPERATURE
+from config import BASE_PROMPT, QUESTION_GENERATION_PROMPT, QUESTION_GENERATION_TEMPERATURE
 from config import QUESTION_GENERATION_MODEL
 
 class QuestionGeneration:
@@ -24,7 +24,7 @@ class QuestionGeneration:
         self.openai_client = openai_client
     
     def generate_question(self, current_requirement_guess, key_questions):
-        """生成下一个问题
+        """生成下一个问题并更新关键问题状态
         
         Args:
             current_requirement_guess (str): 当前的用户需求猜测
@@ -35,18 +35,19 @@ class QuestionGeneration:
         """
         # 如果没有用户需求猜测，生成初始问题
         if not current_requirement_guess or current_requirement_guess == "目前没有关于用户需求的猜测。":
-            return "请您先告诉我您的建筑项目的基本情况，比如是什么类型的建筑？大致的占地面积有多少？"
+            return "请您先告诉我您的建筑项目的基本情况和需求。"
         
         # 格式化关键问题列表，便于提供给LLM
         key_questions_formatted = self._format_key_questions(key_questions)
         
         # 准备提示词
         prompt = QUESTION_GENERATION_PROMPT.format(
+            base_prompt=BASE_PROMPT,
             current_requirement_guess=current_requirement_guess,
             key_questions_formatted=key_questions_formatted
         )
         
-        # 调用API生成下一个问题，使用指定模型
+        # 调用API生成下一个问题并同时更新关键问题状态，使用指定模型
         response = self.openai_client.generate_completion(
             prompt=prompt,
             model_name=QUESTION_GENERATION_MODEL,  # 使用为问题生成指定的模型
@@ -57,8 +58,28 @@ class QuestionGeneration:
         if not response:
             return "能否再详细描述一下您对这个建筑设计的期望和需求？"
         
-        # 返回生成的问题
-        return response.strip()
+        # 处理API返回的JSON响应
+        result = json.loads(response)
+        
+        # 如果响应中包含categories信息，则更新关键问题状态
+        if "categories" in result:
+            for category_result in result["categories"]:
+                category_name = category_result.get("category")
+                status = category_result.get("status")
+                
+                # 查找对应的类别并更新状态
+                for category in key_questions:
+                    if category["category"] == category_name and status == "已知":
+                        category["status"] = "已知"
+        
+        # 获取explanation字段（如果存在）
+        explanation = result.get("explanation", "")
+        
+        # 返回包含问题和解释的字典
+        return {
+            "question": result["question"],
+            "explanation": explanation
+        }
     
     def _format_key_questions(self, key_questions):
         """格式化关键问题列表，便于提供给LLM
@@ -72,9 +93,7 @@ class QuestionGeneration:
         formatted_questions = ""
         
         for category in key_questions:
-            formatted_questions += f"类别：{category['category']}\n"
-            for question in category['questions']:
-                formatted_questions += f"- {question['question']} (状态：{question['status']})\n"
-            formatted_questions += "\n"
+            formatted_questions += f"关键问题类别：{category['category']} (状态：{category['status']})"
+            formatted_questions += "\n\n"
         
-        return formatted_questions 
+        return formatted_questions

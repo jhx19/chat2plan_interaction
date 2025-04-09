@@ -3,10 +3,11 @@
 """
 import sys
 import os
+import json
 # 添加项目根目录到Python路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import SPATIAL_UNDERSTANDING_PROMPT, SPATIAL_UNDERSTANDING_TEMPERATURE, SPATIAL_UNDERSTANDING_MODEL
+from config import BASE_PROMPT, SPATIAL_UNDERSTANDING_PROMPT, SPATIAL_UNDERSTANDING_TEMPERATURE, SPATIAL_UNDERSTANDING_MODEL
 
 class SpatialUnderstanding:
     """
@@ -29,7 +30,7 @@ class SpatialUnderstanding:
             current_spatial_understanding (str): 当前的空间理解记录
         
         Returns:
-            str: 更新后的空间理解记录
+            dict: 包含更新后的空间理解记录和更新状态的JSON对象
         """
         # 如果当前没有空间理解记录，则初始化为空字符串
         if not current_spatial_understanding:
@@ -37,6 +38,7 @@ class SpatialUnderstanding:
         
         # 准备提示词
         prompt = SPATIAL_UNDERSTANDING_PROMPT.format(
+            base_prompt=BASE_PROMPT,
             user_input=user_input,
             current_spatial_understanding=current_spatial_understanding
         )
@@ -50,13 +52,34 @@ class SpatialUnderstanding:
         
         # 如果API调用失败或返回为空，则保持原记录不变
         if not response:
-            return current_spatial_understanding
+            return {
+                "content": current_spatial_understanding,
+                "updated": False
+            }
         
-        # 处理并返回更新后的空间理解记录
-        updated_spatial_understanding = response.strip()
+        # 解析API返回的JSON响应
+        try:
+            result = json.loads(response)
+            updated_spatial_understanding = result.get("spatial_understanding", "")
+            
+            # 检查是否有实质性更新
+            if not updated_spatial_understanding:
+                return {
+                    "content": current_spatial_understanding,
+                    "updated": False
+                }
+            
+            # 检查是否有实质性更新
+            is_updated = updated_spatial_understanding != current_spatial_understanding
+            
+            return {
+                "content": updated_spatial_understanding,
+                "updated": is_updated
+            }
+        except json.JSONDecodeError:
+            # 如果JSON解析失败，返回原记录
+            return {
+                "content": current_spatial_understanding,
+                "updated": False
+            }
         
-        # 检查是否有实质性更新
-        if updated_spatial_understanding == "目前没有关于建筑边界和环境的信息。" and current_spatial_understanding != updated_spatial_understanding:
-            return current_spatial_understanding
-        
-        return updated_spatial_understanding 
